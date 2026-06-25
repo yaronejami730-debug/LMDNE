@@ -80,21 +80,27 @@ export default function Row({
         </div>
         <small className="tel">{contact.telephone}</small>
 
-        {/* Annotations d'origine (fichier importé) */}
+        {/* Annotations d'origine (fichier importé) — tout afficher */}
         {hasOrig && (
           <div className="annot">
-            <span className="annot-label">Fichier :</span>
+            <span className="annot-label">Base :</span>
             {contact.orig_note && (
               <span className="annot-note">📝 {contact.orig_note}</span>
             )}
-            {contact.orig_tag && (
-              <span className="chip chip-tag">{contact.orig_tag}</span>
-            )}
-            {contact.orig_cat && contact.orig_cat !== "1.0" && (
-              <span className="chip">cat {contact.orig_cat}</span>
-            )}
             {contact.orig_flag && (
-              <span className="chip chip-flag">{contact.orig_flag}</span>
+              <span className="chip chip-flag" title="Colonne D">
+                {contact.orig_flag}
+              </span>
+            )}
+            {contact.orig_cat && (
+              <span className="chip chip-cat" title="Colonne E">
+                cat {contact.orig_cat}
+              </span>
+            )}
+            {contact.orig_tag && (
+              <span className="chip chip-tag" title="Colonne G">
+                {contact.orig_tag}
+              </span>
             )}
           </div>
         )}

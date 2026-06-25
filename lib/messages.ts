@@ -39,6 +39,8 @@ Si le cœur vous en dit, voici le lien direct pour y participer :
 
 ${link}
 
+📄 Votre Cerfa est délivré immédiatement et envoyé par mail une fois le paiement effectué.
+
 Un grand merci pour votre soutien 🙏`;
   }
   return `Bonjour ${prenom} 😊
@@ -46,6 +48,8 @@ Un grand merci pour votre soutien 🙏`;
 Suite à notre échange, voici le lien direct pour participer à notre campagne LMNE 2026 :
 
 ${link}
+
+📄 Votre Cerfa est délivré immédiatement et envoyé par mail une fois le paiement effectué.
 
 Un grand merci pour votre soutien 🙏`;
 }

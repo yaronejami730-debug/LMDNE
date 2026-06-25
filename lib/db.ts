@@ -54,13 +54,20 @@ function newId() {
 
 // ---- Contacts ----
 export async function listContacts(): Promise<Contact[]> {
-  const { data, error } = await sb
-    .from("contacts")
-    .select("*")
-    .order("created_at", { ascending: true })
-    .limit(5000);
-  if (error) throw error;
-  return (data ?? []) as Contact[];
+  // PostgREST plafonne à 1000 lignes/requête → on pagine avec .range()
+  const size = 1000;
+  const all: Contact[] = [];
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb
+      .from("contacts")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .range(from, from + size - 1);
+    if (error) throw error;
+    all.push(...((data ?? []) as Contact[]));
+    if (!data || data.length < size) break;
+  }
+  return all;
 }
 
 export async function getContact(id: string): Promise<Contact | undefined> {

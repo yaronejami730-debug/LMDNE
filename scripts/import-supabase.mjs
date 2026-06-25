@@ -69,7 +69,7 @@ async function main() {
   const users = [
     { id: newId(), username: "Altabé", role: "admin" },
     { id: newId(), username: "Yaron", role: "operator" },
-    { id: newId(), username: "Jérémie", role: "operator" },
+    { id: newId(), username: "Jeremy", role: "operator" },
     { id: newId(), username: "Sarah", role: "operator" },
   ];
   for (const u of users) {
