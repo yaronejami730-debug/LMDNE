@@ -31,21 +31,21 @@ export function buildMessage(
   link: string
 ): string {
   if (kind === "relance") {
-    return `Bonjour ${prenom},
+    return `Bonjour ${prenom} 😊
 
-Je me permets de revenir vers vous concernant notre échange.
+Je me permets de revenir vers vous concernant notre campagne LMNE 2026.
 
-Voici le lien direct :
+Si le cœur vous en dit, voici le lien direct pour y participer :
 
 ${link}
 
-Merci pour votre soutien.`;
+Un grand merci pour votre soutien 🙏`;
   }
-  return `Bonjour ${prenom},
+  return `Bonjour ${prenom} 😊
 
-Suite à notre entretien téléphonique, vous trouverez ci-dessous le lien direct pour participer à notre campagne :
+Suite à notre échange, voici le lien direct pour participer à notre campagne LMNE 2026 :
 
 ${link}
 
-Merci pour votre soutien.`;
+Un grand merci pour votre soutien 🙏`;
 }

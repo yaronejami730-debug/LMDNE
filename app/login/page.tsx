@@ -9,8 +9,9 @@ export default async function LoginPage() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>LMDNE</h1>
-        <p className="login-sub">Campagne de dons — Connexion téléprospecteur</p>
+        <div className="login-logo">LMNE</div>
+        <h1>Campagne 2026</h1>
+        <p className="login-sub">Connexion téléprospecteur</p>
         <LoginForm />
       </div>
     </div>

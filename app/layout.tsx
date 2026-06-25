@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Campagne de dons — Téléopérateur",
-  description: "Appel + lien unique de suivi des clics",
+  title: "LMNE 2026 — CRM Campagne de dons",
+  description: "Téléprospection campagne LMNE 2026",
 };
 
 export default function RootLayout({

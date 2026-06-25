@@ -13,8 +13,13 @@ db.exec(`
     telephone TEXT NOT NULL,
     statut TEXT NOT NULL DEFAULT 'À appeler',
     statut_date TEXT,
+    statut_by TEXT,
     call_count INTEGER NOT NULL DEFAULT 0,
     last_call_date TEXT,
+    last_call_by TEXT,
+    wa_count INTEGER NOT NULL DEFAULT 0,
+    last_wa_date TEXT,
+    last_wa_by TEXT,
     sms_count INTEGER NOT NULL DEFAULT 0,
     last_sms_date TEXT,
     orig_note TEXT,
@@ -34,8 +39,13 @@ const addCol = (name: string, def: string) => {
     db.exec(`ALTER TABLE contacts ADD COLUMN ${name} ${def}`);
 };
 addCol("statut_date", "TEXT");
+addCol("statut_by", "TEXT");
 addCol("call_count", "INTEGER NOT NULL DEFAULT 0");
 addCol("last_call_date", "TEXT");
+addCol("last_call_by", "TEXT");
+addCol("wa_count", "INTEGER NOT NULL DEFAULT 0");
+addCol("last_wa_date", "TEXT");
+addCol("last_wa_by", "TEXT");
 addCol("sms_count", "INTEGER NOT NULL DEFAULT 0");
 addCol("last_sms_date", "TEXT");
 addCol("orig_note", "TEXT");
@@ -102,8 +112,13 @@ export type Contact = {
   telephone: string;
   statut: string;
   statut_date: string | null;
+  statut_by: string | null;
   call_count: number;
   last_call_date: string | null;
+  last_call_by: string | null;
+  wa_count: number;
+  last_wa_date: string | null;
+  last_wa_by: string | null;
   sms_count: number;
   last_sms_date: string | null;
   orig_note: string | null;
@@ -133,37 +148,76 @@ export function addContact(nom: string, prenom: string, telephone: string) {
   return id;
 }
 
-export function setStatut(id: string, statut: string) {
+export function setStatut(id: string, statut: string, by?: string) {
   db.prepare(
-    "UPDATE contacts SET statut = ?, statut_date = datetime('now') WHERE id = ?"
-  ).run(statut, id);
+    "UPDATE contacts SET statut = ?, statut_date = datetime('now'), statut_by = ? WHERE id = ?"
+  ).run(statut, by ?? null, id);
+  logEvent(id, "statut", by, statut);
 }
 
-// Enregistre un appel : incrémente le compteur + date, passe en "Appelé"
-// uniquement si le contact n'a pas déjà un statut plus avancé.
-export function recordCall(id: string) {
+// Enregistre un appel : compteur + date + qui a appelé.
+export function recordCall(id: string, by?: string) {
   const c = getContact(id);
   if (!c) return;
   db.prepare(
-    "UPDATE contacts SET call_count = call_count + 1, last_call_date = datetime('now') WHERE id = ?"
-  ).run(id);
-  if (c.statut === "À appeler") setStatut(id, "Appelé");
+    "UPDATE contacts SET call_count = call_count + 1, last_call_date = datetime('now'), last_call_by = ? WHERE id = ?"
+  ).run(by ?? null, id);
+  logEvent(id, "appel", by);
+  if (c.statut === "À appeler") setStatut(id, "Appelé", by);
 }
 
-// SMS / WhatsApp envoyé : compteur SMS + statut "Lien envoyé"
-export function recordSmsSent(id: string) {
+// WhatsApp envoyé (initial ou relance) : compteur + date + qui + statut.
+export function markWhatsApp(
+  id: string,
+  by?: string,
+  kind: "initial" | "relance" = "initial"
+) {
   db.prepare(
-    "UPDATE contacts SET sms_count = sms_count + 1, last_sms_date = datetime('now') WHERE id = ?"
-  ).run(id);
-  setStatut(id, "Lien envoyé");
+    "UPDATE contacts SET wa_count = wa_count + 1, last_wa_date = datetime('now'), last_wa_by = ? WHERE id = ?"
+  ).run(by ?? null, id);
+  logEvent(id, kind === "relance" ? "relance" : "whatsapp", by);
+  setStatut(id, kind === "relance" ? "Relancé" : "Lien envoyé", by);
 }
 
-// Marque "Lien envoyé" sans incrémenter le compteur SMS (cas WhatsApp).
-export function markLinkSent(id: string) {
+// ---- Journal d'événements ----
+db.exec(`
+  CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    username TEXT,
+    detail TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_events_contact ON events(contact_id);
+`);
+
+export type Event = {
+  id: number;
+  contact_id: string;
+  type: string;
+  username: string | null;
+  detail: string | null;
+  created_at: string;
+};
+
+export function logEvent(
+  contactId: string,
+  type: string,
+  username?: string,
+  detail?: string
+) {
   db.prepare(
-    "UPDATE contacts SET last_sms_date = datetime('now') WHERE id = ?"
-  ).run(id);
-  setStatut(id, "Lien envoyé");
+    "INSERT INTO events (contact_id, type, username, detail) VALUES (?, ?, ?, ?)"
+  ).run(contactId, type, username ?? null, detail ?? null);
+}
+
+export function listEvents(contactId: string, limit = 6): Event[] {
+  return db
+    .prepare(
+      "SELECT * FROM events WHERE contact_id = ? ORDER BY id DESC LIMIT ?"
+    )
+    .all(contactId, limit) as Event[];
 }
 
 export default db;

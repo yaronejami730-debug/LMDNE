@@ -4,20 +4,16 @@ import { revalidatePath } from "next/cache";
 import {
   addContact,
   setStatut,
-  getContact,
   recordCall,
-  recordSmsSent,
-  markLinkSent,
+  markWhatsApp,
   addUser,
   deleteUser,
   type Role,
 } from "@/lib/db";
-import { sendSms } from "@/lib/allmysms";
-import { buildMessage, type MsgKind } from "@/lib/messages";
 import { getSession } from "@/lib/auth";
 
-function donationUrl() {
-  return process.env.DONATION_URL || "http://Charithon.io/lmne-2026";
+async function currentUser() {
+  return (await getSession())?.username;
 }
 
 // ---- Gestion des téléprospecteurs (admin uniquement) ----
@@ -58,41 +54,21 @@ export async function createContact(formData: FormData) {
 }
 
 export async function setStatutAction(id: string, statut: string) {
-  setStatut(id, statut);
+  setStatut(id, statut, await currentUser());
   revalidatePath("/");
 }
 
-// Enregistre un appel (date + heure). Renvoie le nombre d'appels désormais.
+// Appel : enregistre date/heure + qui a appelé (user connecté).
 export async function recordCallAction(id: string) {
-  recordCall(id);
+  recordCall(id, await currentUser());
   revalidatePath("/");
 }
 
-// WhatsApp : marque "Lien envoyé" sans envoi SMS facturé.
-export async function markLinkSentAction(id: string) {
-  markLinkSent(id);
-  revalidatePath("/");
-}
-
-export type SmsActionResult = { ok: boolean; message: string };
-
-export async function sendSmsAction(
+// WhatsApp (initial ou relance) : enregistre qui + quand + statut.
+export async function whatsappAction(
   id: string,
-  kind: MsgKind = "initial"
-): Promise<SmsActionResult> {
-  const contact = getContact(id);
-  if (!contact) return { ok: false, message: "Contact introuvable" };
-
-  const message = buildMessage(kind, contact.prenom, donationUrl());
-
-  const res = await sendSms(contact.telephone, message);
-  if (res.ok) {
-    recordSmsSent(id);
-    revalidatePath("/");
-    return {
-      ok: true,
-      message: kind === "relance" ? "Relance envoyée" : "SMS envoyé",
-    };
-  }
-  return { ok: false, message: res.statusText || "Échec de l'envoi" };
+  kind: "initial" | "relance" = "initial"
+) {
+  markWhatsApp(id, await currentUser(), kind);
+  revalidatePath("/");
 }

@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import type { Contact } from "@/lib/db";
 import {
   recordCallAction,
-  sendSmsAction,
-  markLinkSentAction,
+  whatsappAction,
   setStatutAction,
 } from "./actions";
 import { buildMessage, toIntl, STATUSES } from "@/lib/messages";
-import { timeAgo, formatDate } from "@/lib/time";
+import { timeAgo, formatDate, parseSqlite } from "@/lib/time";
+
+// Statuts "terminés" : on n'incite plus à relancer
+const DONE = ["Don effectué", "Refus", "Faux numéro", "Terminé"];
 
 export default function Row({
   contact,
@@ -19,20 +21,12 @@ export default function Row({
   donationUrl: string;
 }) {
   const [pending, startTransition] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState(false);
-
-  function flash(text: string, isErr = false) {
-    setErr(isErr);
-    setMsg(text);
-    setTimeout(() => setMsg(null), 4000);
-  }
 
   function onCall(e: React.MouseEvent) {
-    // Avertissement si déjà appelé
     if (contact.last_call_date) {
+      const who = contact.last_call_by ? ` par ${contact.last_call_by}` : "";
       const ok = window.confirm(
-        `⚠️ Vous avez déjà appelé ${contact.prenom} ${timeAgo(
+        `⚠️ ${contact.prenom} a déjà été appelé${who} ${timeAgo(
           contact.last_call_date
         )} (le ${formatDate(contact.last_call_date)}).\n` +
           `Appels passés : ${contact.call_count}.\n\nRappeler quand même ?`
@@ -45,15 +39,15 @@ export default function Row({
     startTransition(() => recordCallAction(contact.id));
   }
 
-  function send(kind: "initial" | "relance") {
-    startTransition(async () => {
-      const res = await sendSmsAction(contact.id, kind);
-      flash(res.message, !res.ok);
-    });
+  function waUrl(kind: "initial" | "relance") {
+    const text = encodeURIComponent(
+      buildMessage(kind, contact.prenom, donationUrl)
+    );
+    return `https://wa.me/${toIntl(contact.telephone)}?text=${text}`;
   }
 
-  function onWhatsApp() {
-    startTransition(() => markLinkSentAction(contact.id));
+  function onWhatsApp(kind: "initial" | "relance") {
+    startTransition(() => whatsappAction(contact.id, kind));
   }
 
   function onStatut(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -61,25 +55,35 @@ export default function Row({
     startTransition(() => setStatutAction(contact.id, v));
   }
 
-  const waText = encodeURIComponent(
-    buildMessage("initial", contact.prenom, donationUrl)
-  );
-  const waUrl = `https://wa.me/${toIntl(contact.telephone)}?text=${waText}`;
+  // Incitation à relancer : contact contacté mais inactif depuis > 24 h
+  const lastAct = [contact.last_call_date, contact.last_wa_date, contact.statut_date]
+    .map(parseSqlite)
+    .filter((d): d is Date => !!d)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const hoursSince = lastAct ? (Date.now() - lastAct.getTime()) / 3.6e6 : 0;
+  const aRelancer =
+    !DONE.includes(contact.statut) &&
+    contact.statut !== "À appeler" &&
+    hoursSince > 24;
+
+  const hasOrig =
+    contact.orig_note || contact.orig_tag || contact.orig_cat || contact.orig_flag;
 
   return (
-    <div className="row">
+    <div className={`row ${aRelancer ? "relancer" : ""}`}>
       <div className="who">
-        <b>
-          {contact.prenom} {contact.nom}
-        </b>
-        <small>{contact.telephone}</small>
+        <div className="who-head">
+          <b>
+            {contact.prenom} {contact.nom}
+          </b>
+          {aRelancer && <span className="relance-flag">⏰ À relancer</span>}
+        </div>
+        <small className="tel">{contact.telephone}</small>
 
-        {/* Annotations d'origine du fichier */}
-        {(contact.orig_note ||
-          contact.orig_tag ||
-          contact.orig_cat ||
-          contact.orig_flag) && (
+        {/* Annotations d'origine (fichier importé) */}
+        {hasOrig && (
           <div className="annot">
+            <span className="annot-label">Fichier :</span>
             {contact.orig_note && (
               <span className="annot-note">📝 {contact.orig_note}</span>
             )}
@@ -95,19 +99,25 @@ export default function Row({
           </div>
         )}
 
-        {/* Suivi appels / SMS */}
-        <div className="meta">
-          {contact.call_count > 0 && (
-            <span>
-              📞 {contact.call_count}× · {timeAgo(contact.last_call_date)}
-            </span>
-          )}
-          {contact.sms_count > 0 && (
-            <span>
-              💬 {contact.sms_count}× · {timeAgo(contact.last_sms_date)}
-            </span>
-          )}
-        </div>
+        {/* Activité enregistrée par le système */}
+        {(contact.call_count > 0 || contact.wa_count > 0) && (
+          <div className="meta">
+            {contact.call_count > 0 && (
+              <span>
+                📞 {contact.call_count}× ·{" "}
+                {contact.last_call_by ? `${contact.last_call_by} · ` : ""}
+                {timeAgo(contact.last_call_date)}
+              </span>
+            )}
+            {contact.wa_count > 0 && (
+              <span>
+                🟢 {contact.wa_count}× ·{" "}
+                {contact.last_wa_by ? `${contact.last_wa_by} · ` : ""}
+                {timeAgo(contact.last_wa_date)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="status-col">
@@ -127,38 +137,36 @@ export default function Row({
           ))}
         </select>
         {contact.statut_date && (
-          <small className="status-date">{formatDate(contact.statut_date)}</small>
+          <small className="status-date">
+            {contact.statut_by ? `${contact.statut_by} · ` : ""}
+            {formatDate(contact.statut_date)}
+          </small>
         )}
       </div>
 
       <div className="actions">
-        <a
-          className="btn-call"
-          href={`tel:${contact.telephone}`}
-          onClick={onCall}
-        >
+        <a className="btn-call" href={`tel:${contact.telephone}`} onClick={onCall}>
           <span className="ico">📞</span> Appeler
         </a>
-        <button className="btn-sms" onClick={() => send("initial")} disabled={pending}>
-          <span className="ico">{pending ? "⏳" : "💬"}</span> SMS
-        </button>
-        <button className="btn-relance" onClick={() => send("relance")} disabled={pending}>
-          <span className="ico">🔁</span> Relancer
-        </button>
         <a
           className="btn-wa"
-          href={waUrl}
+          href={waUrl("initial")}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={onWhatsApp}
+          onClick={() => onWhatsApp("initial")}
         >
           <span className="ico">🟢</span> WhatsApp
         </a>
+        <a
+          className="btn-relance"
+          href={waUrl("relance")}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => onWhatsApp("relance")}
+        >
+          <span className="ico">🔁</span> Relancer
+        </a>
       </div>
-
-      {msg && (
-        <span className={`flash ${err ? "flash-err" : "flash-ok"}`}>{msg}</span>
-      )}
     </div>
   );
 }
