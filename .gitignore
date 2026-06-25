@@ -18,3 +18,5 @@ data.db-wal
 # divers
 .DS_Store
 *.log
+.vercel
+.env*

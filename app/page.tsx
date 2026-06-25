@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await requireSession();
-  const contacts = listContacts();
+  const contacts = await listContacts();
   const total = contacts.length;
   const appeles = contacts.filter((c) => c.call_count > 0).length;
   const liens = contacts.filter((c) => c.statut === "Lien envoyé").length;
@@ -49,7 +49,7 @@ export default async function Home() {
         </div>
       </header>
 
-      {isAdmin && <AdminPanel users={listUsers()} />}
+      {isAdmin && <AdminPanel users={await listUsers()} />}
 
       <div className="stats">
         <div className="stat">

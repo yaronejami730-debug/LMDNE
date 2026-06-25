@@ -29,7 +29,7 @@ export async function addUserAction(
   const role = (String(formData.get("role") || "operator") as Role);
   if (!username) return { error: "Identifiant requis" };
   try {
-    addUser(username, role === "admin" ? "admin" : "operator");
+    await addUser(username, role === "admin" ? "admin" : "operator");
   } catch {
     return { error: "Cet identifiant existe déjà" };
   }
@@ -40,7 +40,7 @@ export async function addUserAction(
 export async function deleteUserAction(id: string) {
   const s = await getSession();
   if (s?.role !== "admin") return;
-  deleteUser(id);
+  await deleteUser(id);
   revalidatePath("/");
 }
 
@@ -49,18 +49,18 @@ export async function createContact(formData: FormData) {
   const prenom = String(formData.get("prenom") || "").trim();
   const telephone = String(formData.get("telephone") || "").trim();
   if (!nom || !prenom || !telephone) return;
-  addContact(nom, prenom, telephone);
+  await addContact(nom, prenom, telephone);
   revalidatePath("/");
 }
 
 export async function setStatutAction(id: string, statut: string) {
-  setStatut(id, statut, await currentUser());
+  await setStatut(id, statut, await currentUser());
   revalidatePath("/");
 }
 
 // Appel : enregistre date/heure + qui a appelé (user connecté).
 export async function recordCallAction(id: string) {
-  recordCall(id, await currentUser());
+  await recordCall(id, await currentUser());
   revalidatePath("/");
 }
 
@@ -69,6 +69,6 @@ export async function whatsappAction(
   id: string,
   kind: "initial" | "relance" = "initial"
 ) {
-  markWhatsApp(id, await currentUser(), kind);
+  await markWhatsApp(id, await currentUser(), kind);
   revalidatePath("/");
 }

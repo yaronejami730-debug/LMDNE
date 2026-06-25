@@ -17,7 +17,7 @@ export async function loginAction(
   if (!username || !password) return { error: "Identifiant et mot de passe requis" };
   if (password !== expected) return { error: "Mot de passe incorrect" };
 
-  const user = getUserByName(username);
+  const user = await getUserByName(username);
   if (!user) return { error: "Utilisateur inconnu" };
 
   await setSession({ username: user.username, role: user.role });

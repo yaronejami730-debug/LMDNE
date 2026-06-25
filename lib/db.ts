@@ -1,109 +1,22 @@
-import Database from "better-sqlite3";
-import path from "path";
+import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "crypto";
 
-const db = new Database(path.join(process.cwd(), "data.db"));
-db.pragma("journal_mode = WAL");
+const url = process.env.SUPABASE_URL!;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS contacts (
-    id TEXT PRIMARY KEY,
-    nom TEXT NOT NULL,
-    prenom TEXT NOT NULL,
-    telephone TEXT NOT NULL,
-    statut TEXT NOT NULL DEFAULT 'À appeler',
-    statut_date TEXT,
-    statut_by TEXT,
-    call_count INTEGER NOT NULL DEFAULT 0,
-    last_call_date TEXT,
-    last_call_by TEXT,
-    wa_count INTEGER NOT NULL DEFAULT 0,
-    last_wa_date TEXT,
-    last_wa_by TEXT,
-    sms_count INTEGER NOT NULL DEFAULT 0,
-    last_sms_date TEXT,
-    orig_note TEXT,
-    orig_tag TEXT,
-    orig_cat TEXT,
-    orig_flag TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-`);
-
-// Migration des bases existantes : ajoute les colonnes manquantes
-const cols = (
-  db.prepare("PRAGMA table_info(contacts)").all() as { name: string }[]
-).map((c) => c.name);
-const addCol = (name: string, def: string) => {
-  if (!cols.includes(name))
-    db.exec(`ALTER TABLE contacts ADD COLUMN ${name} ${def}`);
-};
-addCol("statut_date", "TEXT");
-addCol("statut_by", "TEXT");
-addCol("call_count", "INTEGER NOT NULL DEFAULT 0");
-addCol("last_call_date", "TEXT");
-addCol("last_call_by", "TEXT");
-addCol("wa_count", "INTEGER NOT NULL DEFAULT 0");
-addCol("last_wa_date", "TEXT");
-addCol("last_wa_by", "TEXT");
-addCol("sms_count", "INTEGER NOT NULL DEFAULT 0");
-addCol("last_sms_date", "TEXT");
-addCol("orig_note", "TEXT");
-addCol("orig_tag", "TEXT");
-addCol("orig_cat", "TEXT");
-addCol("orig_flag", "TEXT");
-
-// ---- Utilisateurs (téléprospecteurs + admin) ----
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    role TEXT NOT NULL DEFAULT 'operator',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-`);
+// Client serveur uniquement (service_role : bypass RLS). Jamais exposé au client.
+const sb = createClient(url, key, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 export type Role = "operator" | "admin";
+
 export type User = {
   id: string;
   username: string;
   role: Role;
   created_at: string;
 };
-
-export function listUsers(): User[] {
-  return db
-    .prepare("SELECT * FROM users ORDER BY role DESC, username ASC")
-    .all() as User[];
-}
-
-export function getUserByName(username: string): User | undefined {
-  return db
-    .prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE")
-    .get(username.trim()) as User | undefined;
-}
-
-export function addUser(username: string, role: Role = "operator") {
-  const id = randomBytes(5).toString("hex");
-  db.prepare("INSERT INTO users (id, username, role) VALUES (?, ?, ?)").run(
-    id,
-    username.trim(),
-    role
-  );
-  return id;
-}
-
-export function deleteUser(id: string) {
-  db.prepare("DELETE FROM users WHERE id = ?").run(id);
-}
-
-// Seed initial si table vide
-if ((db.prepare("SELECT COUNT(*) c FROM users").get() as { c: number }).c === 0) {
-  addUser("Altabé", "admin");
-  addUser("Yaron", "operator");
-  addUser("Jérémie", "operator");
-  addUser("Sarah", "operator");
-}
 
 export type Contact = {
   id: string;
@@ -119,78 +32,12 @@ export type Contact = {
   wa_count: number;
   last_wa_date: string | null;
   last_wa_by: string | null;
-  sms_count: number;
-  last_sms_date: string | null;
   orig_note: string | null;
   orig_tag: string | null;
   orig_cat: string | null;
   orig_flag: string | null;
   created_at: string;
 };
-
-export function listContacts(): Contact[] {
-  return db
-    .prepare("SELECT * FROM contacts ORDER BY created_at ASC")
-    .all() as Contact[];
-}
-
-export function getContact(id: string): Contact | undefined {
-  return db.prepare("SELECT * FROM contacts WHERE id = ?").get(id) as
-    | Contact
-    | undefined;
-}
-
-export function addContact(nom: string, prenom: string, telephone: string) {
-  const id = randomBytes(5).toString("hex");
-  db.prepare(
-    "INSERT INTO contacts (id, nom, prenom, telephone) VALUES (?, ?, ?, ?)"
-  ).run(id, nom, prenom, telephone);
-  return id;
-}
-
-export function setStatut(id: string, statut: string, by?: string) {
-  db.prepare(
-    "UPDATE contacts SET statut = ?, statut_date = datetime('now'), statut_by = ? WHERE id = ?"
-  ).run(statut, by ?? null, id);
-  logEvent(id, "statut", by, statut);
-}
-
-// Enregistre un appel : compteur + date + qui a appelé.
-export function recordCall(id: string, by?: string) {
-  const c = getContact(id);
-  if (!c) return;
-  db.prepare(
-    "UPDATE contacts SET call_count = call_count + 1, last_call_date = datetime('now'), last_call_by = ? WHERE id = ?"
-  ).run(by ?? null, id);
-  logEvent(id, "appel", by);
-  if (c.statut === "À appeler") setStatut(id, "Appelé", by);
-}
-
-// WhatsApp envoyé (initial ou relance) : compteur + date + qui + statut.
-export function markWhatsApp(
-  id: string,
-  by?: string,
-  kind: "initial" | "relance" = "initial"
-) {
-  db.prepare(
-    "UPDATE contacts SET wa_count = wa_count + 1, last_wa_date = datetime('now'), last_wa_by = ? WHERE id = ?"
-  ).run(by ?? null, id);
-  logEvent(id, kind === "relance" ? "relance" : "whatsapp", by);
-  setStatut(id, kind === "relance" ? "Relancé" : "Lien envoyé", by);
-}
-
-// ---- Journal d'événements ----
-db.exec(`
-  CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    contact_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    username TEXT,
-    detail TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-  CREATE INDEX IF NOT EXISTS idx_events_contact ON events(contact_id);
-`);
 
 export type Event = {
   id: number;
@@ -201,23 +48,146 @@ export type Event = {
   created_at: string;
 };
 
-export function logEvent(
+function newId() {
+  return randomBytes(5).toString("hex");
+}
+
+// ---- Contacts ----
+export async function listContacts(): Promise<Contact[]> {
+  const { data, error } = await sb
+    .from("contacts")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .limit(5000);
+  if (error) throw error;
+  return (data ?? []) as Contact[];
+}
+
+export async function getContact(id: string): Promise<Contact | undefined> {
+  const { data, error } = await sb
+    .from("contacts")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Contact) ?? undefined;
+}
+
+export async function addContact(
+  nom: string,
+  prenom: string,
+  telephone: string
+) {
+  const id = newId();
+  const { error } = await sb
+    .from("contacts")
+    .insert({ id, nom, prenom, telephone });
+  if (error) throw error;
+  return id;
+}
+
+export async function setStatut(id: string, statut: string, by?: string) {
+  const { error } = await sb
+    .from("contacts")
+    .update({ statut, statut_date: new Date().toISOString(), statut_by: by ?? null })
+    .eq("id", id);
+  if (error) throw error;
+  await logEvent(id, "statut", by, statut);
+}
+
+export async function recordCall(id: string, by?: string) {
+  const c = await getContact(id);
+  if (!c) return;
+  const { error } = await sb
+    .from("contacts")
+    .update({
+      call_count: c.call_count + 1,
+      last_call_date: new Date().toISOString(),
+      last_call_by: by ?? null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+  await logEvent(id, "appel", by);
+  if (c.statut === "À appeler") await setStatut(id, "Appelé", by);
+}
+
+export async function markWhatsApp(
+  id: string,
+  by?: string,
+  kind: "initial" | "relance" = "initial"
+) {
+  const c = await getContact(id);
+  if (!c) return;
+  const { error } = await sb
+    .from("contacts")
+    .update({
+      wa_count: c.wa_count + 1,
+      last_wa_date: new Date().toISOString(),
+      last_wa_by: by ?? null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+  await logEvent(id, kind === "relance" ? "relance" : "whatsapp", by);
+  await setStatut(id, kind === "relance" ? "Relancé" : "Lien envoyé", by);
+}
+
+// ---- Événements ----
+export async function logEvent(
   contactId: string,
   type: string,
   username?: string,
   detail?: string
 ) {
-  db.prepare(
-    "INSERT INTO events (contact_id, type, username, detail) VALUES (?, ?, ?, ?)"
-  ).run(contactId, type, username ?? null, detail ?? null);
+  await sb.from("events").insert({
+    contact_id: contactId,
+    type,
+    username: username ?? null,
+    detail: detail ?? null,
+  });
 }
 
-export function listEvents(contactId: string, limit = 6): Event[] {
-  return db
-    .prepare(
-      "SELECT * FROM events WHERE contact_id = ? ORDER BY id DESC LIMIT ?"
-    )
-    .all(contactId, limit) as Event[];
+export async function listEvents(contactId: string, limit = 6): Promise<Event[]> {
+  const { data, error } = await sb
+    .from("events")
+    .select("*")
+    .eq("contact_id", contactId)
+    .order("id", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as Event[];
 }
 
-export default db;
+// ---- Utilisateurs ----
+export async function listUsers(): Promise<User[]> {
+  const { data, error } = await sb
+    .from("users")
+    .select("*")
+    .order("role", { ascending: false })
+    .order("username", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as User[];
+}
+
+export async function getUserByName(username: string): Promise<User | undefined> {
+  const { data, error } = await sb
+    .from("users")
+    .select("*")
+    .ilike("username", username.trim())
+    .maybeSingle();
+  if (error) throw error;
+  return (data as User) ?? undefined;
+}
+
+export async function addUser(username: string, role: Role = "operator") {
+  const id = newId();
+  const { error } = await sb
+    .from("users")
+    .insert({ id, username: username.trim(), role });
+  if (error) throw error;
+  return id;
+}
+
+export async function deleteUser(id: string) {
+  const { error } = await sb.from("users").delete().eq("id", id);
+  if (error) throw error;
+}
