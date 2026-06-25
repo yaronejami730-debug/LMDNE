@@ -43,6 +43,58 @@ addCol("orig_tag", "TEXT");
 addCol("orig_cat", "TEXT");
 addCol("orig_flag", "TEXT");
 
+// ---- Utilisateurs (téléprospecteurs + admin) ----
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    role TEXT NOT NULL DEFAULT 'operator',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+export type Role = "operator" | "admin";
+export type User = {
+  id: string;
+  username: string;
+  role: Role;
+  created_at: string;
+};
+
+export function listUsers(): User[] {
+  return db
+    .prepare("SELECT * FROM users ORDER BY role DESC, username ASC")
+    .all() as User[];
+}
+
+export function getUserByName(username: string): User | undefined {
+  return db
+    .prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE")
+    .get(username.trim()) as User | undefined;
+}
+
+export function addUser(username: string, role: Role = "operator") {
+  const id = randomBytes(5).toString("hex");
+  db.prepare("INSERT INTO users (id, username, role) VALUES (?, ?, ?)").run(
+    id,
+    username.trim(),
+    role
+  );
+  return id;
+}
+
+export function deleteUser(id: string) {
+  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+}
+
+// Seed initial si table vide
+if ((db.prepare("SELECT COUNT(*) c FROM users").get() as { c: number }).c === 0) {
+  addUser("Altabé", "admin");
+  addUser("Yaron", "operator");
+  addUser("Jérémie", "operator");
+  addUser("Sarah", "operator");
+}
+
 export type Contact = {
   id: string;
   nom: string;
