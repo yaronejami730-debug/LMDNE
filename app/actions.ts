@@ -8,12 +8,44 @@ import {
   recordCall,
   recordSmsSent,
   markLinkSent,
+  addUser,
+  deleteUser,
+  type Role,
 } from "@/lib/db";
 import { sendSms } from "@/lib/allmysms";
 import { buildMessage, type MsgKind } from "@/lib/messages";
+import { getSession } from "@/lib/auth";
 
 function donationUrl() {
   return process.env.DONATION_URL || "http://Charithon.io/lmne-2026";
+}
+
+// ---- Gestion des téléprospecteurs (admin uniquement) ----
+export type UserActionResult = { error?: string };
+
+export async function addUserAction(
+  _prev: UserActionResult,
+  formData: FormData
+): Promise<UserActionResult> {
+  const s = await getSession();
+  if (s?.role !== "admin") return { error: "Réservé à l'administrateur" };
+  const username = String(formData.get("username") || "").trim();
+  const role = (String(formData.get("role") || "operator") as Role);
+  if (!username) return { error: "Identifiant requis" };
+  try {
+    addUser(username, role === "admin" ? "admin" : "operator");
+  } catch {
+    return { error: "Cet identifiant existe déjà" };
+  }
+  revalidatePath("/");
+  return {};
+}
+
+export async function deleteUserAction(id: string) {
+  const s = await getSession();
+  if (s?.role !== "admin") return;
+  deleteUser(id);
+  revalidatePath("/");
 }
 
 export async function createContact(formData: FormData) {

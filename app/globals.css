@@ -16,6 +16,151 @@ h1 {
   font-size: 22px;
   margin: 0 0 4px;
 }
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.userbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.userchip {
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+.userchip em {
+  color: #d97706;
+  font-style: normal;
+}
+.btn-logout {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+/* Login */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.login-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 32px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+}
+.login-card h1 {
+  font-size: 26px;
+  margin: 0;
+  letter-spacing: 2px;
+}
+.login-sub {
+  color: #6b7280;
+  font-size: 13px;
+  margin: 4px 0 20px;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-form input {
+  width: 100%;
+}
+.login-err {
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+/* Admin */
+.admin {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+.admin summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+}
+.admin-body {
+  margin-top: 12px;
+}
+.user-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.user-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.user-tag.admin {
+  background: #fef3c7;
+  color: #92400e;
+}
+.user-del {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.user-del:hover {
+  opacity: 1;
+}
+.add-user {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.add-user input {
+  flex: 1;
+  min-width: 140px;
+}
+.add-user select {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+.admin-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 10px 0 0;
+}
+.admin-hint code {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
 .sub {
   color: #6b7280;
   font-size: 14px;
