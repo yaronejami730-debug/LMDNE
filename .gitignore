@@ -1,0 +1,20 @@
+# deps
+/node_modules
+
+# next
+/.next
+/out
+
+# data (base SQLite locale — ne pas versionner)
+data.db
+data.db-shm
+data.db-wal
+
+# secrets / env
+.env
+.env.local
+.env*.local
+
+# divers
+.DS_Store
+*.log
