@@ -32,6 +32,9 @@ export type Contact = {
   wa_count: number;
   last_wa_date: string | null;
   last_wa_by: string | null;
+  relance_count: number;
+  last_relance_date: string | null;
+  last_relance_by: string | null;
   orig_note: string | null;
   orig_tag: string | null;
   orig_cat: string | null;
@@ -115,7 +118,6 @@ export async function recordCall(id: string, by?: string) {
     .eq("id", id);
   if (error) throw error;
   await logEvent(id, "appel", by);
-  if (c.statut === "À appeler") await setStatut(id, "Appelé", by);
 }
 
 export async function markWhatsApp(
@@ -125,17 +127,31 @@ export async function markWhatsApp(
 ) {
   const c = await getContact(id);
   if (!c) return;
-  const { error } = await sb
-    .from("contacts")
-    .update({
-      wa_count: c.wa_count + 1,
-      last_wa_date: new Date().toISOString(),
-      last_wa_by: by ?? null,
-    })
-    .eq("id", id);
-  if (error) throw error;
-  await logEvent(id, kind === "relance" ? "relance" : "whatsapp", by);
-  await setStatut(id, kind === "relance" ? "Relancé" : "Lien envoyé", by);
+  const now = new Date().toISOString();
+  if (kind === "relance") {
+    const { error } = await sb
+      .from("contacts")
+      .update({
+        relance_count: c.relance_count + 1,
+        last_relance_date: now,
+        last_relance_by: by ?? null,
+      })
+      .eq("id", id);
+    if (error) throw error;
+    await logEvent(id, "relance", by);
+  } else {
+    const { error } = await sb
+      .from("contacts")
+      .update({
+        wa_count: c.wa_count + 1,
+        last_wa_date: now,
+        last_wa_by: by ?? null,
+      })
+      .eq("id", id);
+    if (error) throw error;
+    await logEvent(id, "whatsapp", by);
+    await setStatut(id, "Lien envoyé", by);
+  }
 }
 
 // ---- Événements ----

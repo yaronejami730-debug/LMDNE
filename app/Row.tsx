@@ -7,11 +7,8 @@ import {
   whatsappAction,
   setStatutAction,
 } from "./actions";
-import { buildMessage, toIntl, STATUSES } from "@/lib/messages";
+import { buildMessage, toIntl, STATUS_PROGRESS, STATUS_SUIVI } from "@/lib/messages";
 import { timeAgo, formatDate, parseSqlite } from "@/lib/time";
-
-// Statuts "terminés" : on n'incite plus à relancer
-const DONE = ["Don effectué", "Refus", "Faux numéro", "Terminé"];
 
 export default function Row({
   contact,
@@ -23,13 +20,15 @@ export default function Row({
   const [pending, startTransition] = useTransition();
 
   function onCall(e: React.MouseEvent) {
-    if (contact.last_call_date) {
+    // Avertir seulement si appelé il y a moins de 5 minutes
+    const last = parseSqlite(contact.last_call_date);
+    const within5 = last && Date.now() - last.getTime() < 5 * 60 * 1000;
+    if (within5) {
       const who = contact.last_call_by ? ` par ${contact.last_call_by}` : "";
       const ok = window.confirm(
-        `⚠️ ${contact.prenom} a déjà été appelé${who} ${timeAgo(
+        `⚠️ Attention : ${contact.prenom} a déjà été appelé${who} ${timeAgo(
           contact.last_call_date
-        )} (le ${formatDate(contact.last_call_date)}).\n` +
-          `Appels passés : ${contact.call_count}.\n\nRappeler quand même ?`
+        )}.\n\nVoulez-vous quand même l'appeler ?`
       );
       if (!ok) {
         e.preventDefault();
@@ -50,37 +49,22 @@ export default function Row({
     startTransition(() => whatsappAction(contact.id, kind));
   }
 
-  function onStatut(e: React.ChangeEvent<HTMLSelectElement>) {
-    const v = e.target.value;
-    startTransition(() => setStatutAction(contact.id, v));
+  function onStatut(v: string) {
+    if (v) startTransition(() => setStatutAction(contact.id, v));
   }
-
-  // Incitation à relancer : contact contacté mais inactif depuis > 24 h
-  const lastAct = [contact.last_call_date, contact.last_wa_date, contact.statut_date]
-    .map(parseSqlite)
-    .filter((d): d is Date => !!d)
-    .sort((a, b) => b.getTime() - a.getTime())[0];
-  const hoursSince = lastAct ? (Date.now() - lastAct.getTime()) / 3.6e6 : 0;
-  const aRelancer =
-    !DONE.includes(contact.statut) &&
-    contact.statut !== "À appeler" &&
-    hoursSince > 24;
 
   const hasOrig =
     contact.orig_note || contact.orig_tag || contact.orig_cat || contact.orig_flag;
 
   return (
-    <div className={`row ${aRelancer ? "relancer" : ""}`}>
+    <div className="row">
       <div className="who">
-        <div className="who-head">
-          <b>
-            {contact.prenom} {contact.nom}
-          </b>
-          {aRelancer && <span className="relance-flag">⏰ À relancer</span>}
-        </div>
+        <b>
+          {contact.prenom} {contact.nom}
+        </b>
         <small className="tel">{contact.telephone}</small>
 
-        {/* Annotations d'origine (fichier importé) — tout afficher */}
+        {/* Données d'origine du fichier */}
         {hasOrig && (
           <div className="annot">
             <span className="annot-label">Base :</span>
@@ -94,7 +78,7 @@ export default function Row({
             )}
             {contact.orig_cat && (
               <span className="chip chip-cat" title="Colonne E">
-                cat {contact.orig_cat}
+                {contact.orig_cat}
               </span>
             )}
             {contact.orig_tag && (
@@ -105,38 +89,59 @@ export default function Row({
           </div>
         )}
 
-        {/* Activité enregistrée par le système */}
-        {(contact.call_count > 0 || contact.wa_count > 0) && (
-          <div className="meta">
+        {/* Historique des actions */}
+        {(contact.call_count > 0 ||
+          contact.wa_count > 0 ||
+          contact.relance_count > 0) && (
+          <div className="histo">
             {contact.call_count > 0 && (
-              <span>
-                📞 {contact.call_count}× ·{" "}
-                {contact.last_call_by ? `${contact.last_call_by} · ` : ""}
+              <span className="histo-line">
+                📞 {contact.last_call_by || "—"} a appelé{" "}
                 {timeAgo(contact.last_call_date)}
+                {contact.call_count > 1 ? ` (${contact.call_count}×)` : ""}
               </span>
             )}
             {contact.wa_count > 0 && (
-              <span>
-                🟢 {contact.wa_count}× ·{" "}
-                {contact.last_wa_by ? `${contact.last_wa_by} · ` : ""}
+              <span className="histo-line">
+                🟢 {contact.last_wa_by || "—"} a envoyé WhatsApp{" "}
                 {timeAgo(contact.last_wa_date)}
+                {contact.wa_count > 1 ? ` (${contact.wa_count}×)` : ""}
+              </span>
+            )}
+            {contact.relance_count > 0 && (
+              <span className="histo-line">
+                🔁 {contact.last_relance_by || "—"} a relancé{" "}
+                {timeAgo(contact.last_relance_date)}
+                {contact.relance_count > 1 ? ` (${contact.relance_count}×)` : ""}
               </span>
             )}
           </div>
         )}
       </div>
 
+      {/* Deux menus déroulants */}
       <div className="status-col">
         <select
           className="status-select"
-          value={STATUSES.includes(contact.statut as never) ? contact.statut : ""}
-          onChange={onStatut}
+          value={STATUS_PROGRESS.includes(contact.statut as never) ? contact.statut : ""}
+          onChange={(e) => onStatut(e.target.value)}
           disabled={pending}
         >
-          {!STATUSES.includes(contact.statut as never) && (
-            <option value="">{contact.statut}</option>
-          )}
-          {STATUSES.map((s) => (
+          <option value="">— Avancement —</option>
+          {STATUS_PROGRESS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <select
+          className="status-select"
+          value={STATUS_SUIVI.includes(contact.statut as never) ? contact.statut : ""}
+          onChange={(e) => onStatut(e.target.value)}
+          disabled={pending}
+        >
+          <option value="">— Suivi —</option>
+          {STATUS_SUIVI.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
@@ -144,8 +149,7 @@ export default function Row({
         </select>
         {contact.statut_date && (
           <small className="status-date">
-            {contact.statut_by ? `${contact.statut_by} · ` : ""}
-            {formatDate(contact.statut_date)}
+            {contact.statut} · {formatDate(contact.statut_date)}
           </small>
         )}
       </div>

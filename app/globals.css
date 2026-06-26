@@ -332,6 +332,26 @@ button {
   color: var(--muted);
 }
 
+/* historique des actions */
+.histo {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-left: 3px solid var(--line);
+  padding-left: 10px;
+}
+.histo-line {
+  font-size: 12.5px;
+  color: #374151;
+}
+
+/* filtre */
+.filter-select {
+  font-weight: 600;
+  min-width: 180px;
+}
+
 /* statut */
 .status-col {
   display: flex;

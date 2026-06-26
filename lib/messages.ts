@@ -2,20 +2,16 @@
 
 export type MsgKind = "initial" | "relance";
 
-// Statuts disponibles dans le menu déroulant manuel.
-export const STATUSES = [
+// Deux menus déroulants distincts.
+export const STATUS_PROGRESS = ["Lien envoyé", "Don effectué", "Terminé"] as const;
+export const STATUS_SUIVI = [
   "À appeler",
-  "Appelé",
-  "Lien envoyé",
-  "Relancé",
   "À rappeler",
+  "À relancer",
   "Ne répond pas",
-  "Faux numéro",
-  "Refus",
-  "À donner",
-  "Don effectué",
-  "Terminé",
+  "Refusé",
 ] as const;
+export const STATUSES = [...STATUS_SUIVI, ...STATUS_PROGRESS] as const;
 
 // Convertit 06xxxxxxxx -> 336xxxxxxxx (international, sans +). Fonction pure.
 export function toIntl(phone: string): string {
