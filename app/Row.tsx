@@ -56,6 +56,43 @@ export default function Row({
   const hasOrig =
     contact.orig_note || contact.orig_tag || contact.orig_cat || contact.orig_flag;
 
+  // Timeline chronologique des actions
+  const events = [
+    contact.call_count > 0 && {
+      icon: "📞",
+      label: "a appelé",
+      who: contact.last_call_by,
+      date: contact.last_call_date,
+      n: contact.call_count,
+    },
+    contact.wa_count > 0 && {
+      icon: "🟢",
+      label: "a envoyé le lien par WhatsApp",
+      who: contact.last_wa_by,
+      date: contact.last_wa_date,
+      n: contact.wa_count,
+    },
+    contact.relance_count > 0 && {
+      icon: "🔁",
+      label: "a relancé",
+      who: contact.last_relance_by,
+      date: contact.last_relance_date,
+      n: contact.relance_count,
+    },
+  ]
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        (parseSqlite((a as { date: string }).date)?.getTime() ?? 0) -
+        (parseSqlite((b as { date: string }).date)?.getTime() ?? 0)
+    ) as {
+    icon: string;
+    label: string;
+    who: string | null;
+    date: string | null;
+    n: number;
+  }[];
+
   return (
     <div className="row">
       <div className="who">
@@ -89,32 +126,23 @@ export default function Row({
           </div>
         )}
 
-        {/* Historique des actions */}
-        {(contact.call_count > 0 ||
-          contact.wa_count > 0 ||
-          contact.relance_count > 0) && (
-          <div className="histo">
-            {contact.call_count > 0 && (
-              <span className="histo-line">
-                📞 {contact.last_call_by || "—"} a appelé{" "}
-                {timeAgo(contact.last_call_date)}
-                {contact.call_count > 1 ? ` (${contact.call_count}×)` : ""}
-              </span>
-            )}
-            {contact.wa_count > 0 && (
-              <span className="histo-line">
-                🟢 {contact.last_wa_by || "—"} a envoyé WhatsApp{" "}
-                {timeAgo(contact.last_wa_date)}
-                {contact.wa_count > 1 ? ` (${contact.wa_count}×)` : ""}
-              </span>
-            )}
-            {contact.relance_count > 0 && (
-              <span className="histo-line">
-                🔁 {contact.last_relance_by || "—"} a relancé{" "}
-                {timeAgo(contact.last_relance_date)}
-                {contact.relance_count > 1 ? ` (${contact.relance_count}×)` : ""}
-              </span>
-            )}
+        {/* Timeline des actions */}
+        {events.length > 0 && (
+          <div className="timeline">
+            {events.map((ev, i) => (
+              <div className="tl-item" key={i}>
+                <span className="tl-dot">{ev.icon}</span>
+                <div className="tl-body">
+                  <span className="tl-top">
+                    <b>{ev.who || "—"}</b> {ev.label}
+                    {ev.n > 1 ? ` (${ev.n}×)` : ""}
+                  </span>
+                  <span className="tl-time">
+                    {formatDate(ev.date)} · {timeAgo(ev.date)}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -147,11 +175,6 @@ export default function Row({
             </option>
           ))}
         </select>
-        {contact.statut_date && (
-          <small className="status-date">
-            {contact.statut} · {formatDate(contact.statut_date)}
-          </small>
-        )}
       </div>
 
       <div className="actions">

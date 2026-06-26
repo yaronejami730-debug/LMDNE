@@ -22,6 +22,24 @@ export function timeAgo(d: string | null): string {
   return `il y a ${mo} mois`;
 }
 
+// "18:46" (heure seule) ou "25/06 18:46" si autre jour
+export function formatClock(d: string | null): string {
+  const date = parseSqlite(d);
+  if (!date) return "";
+  const today = new Date();
+  const sameDay =
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear();
+  const hm = date.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (sameDay) return hm;
+  const dm = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+  return `${dm} ${hm}`;
+}
+
 // "25/06/2026 18:46"
 export function formatDate(d: string | null): string {
   const date = parseSqlite(d);
