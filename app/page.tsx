@@ -17,11 +17,14 @@ export default async function Home() {
   const events = await listAllEvents();
   const eventsByContact: Record<string, Event[]> = {};
   const statsByUser: Record<string, UserStats> = {};
+  const linkContacts = new Set<string>(); // contacts ayant reçu le lien (WA/SMS)
   // WhatsApp/relances envoyés par le user connecté dans la dernière heure (anti-spam)
   const hourAgo = Date.now() - 3600_000;
   let waLastHour = 0;
   for (const e of events) {
     (eventsByContact[e.contact_id] ||= []).push(e);
+    if (e.type === "whatsapp" || e.type === "sms")
+      linkContacts.add(e.contact_id);
     if (
       (e.type === "whatsapp" || e.type === "relance") &&
       e.username === session.username &&
@@ -37,9 +40,7 @@ export default async function Home() {
     else if (e.type === "relance") s.relance++;
   }
   const appeles = contacts.filter((c) => c.call_count > 0).length;
-  const liens = contacts.filter(
-    (c) => c.wa_count > 0 || c.sms_count > 0
-  ).length;
+  const liens = linkContacts.size;
   const nrp = contacts.filter((c) => c.statut === "Ne répond pas").length;
   const donationUrl = process.env.DONATION_URL || "http://Charithon.io/lmne-2026";
 

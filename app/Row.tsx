@@ -5,7 +5,6 @@ import type { Contact, Event } from "@/lib/db";
 import {
   recordCallAction,
   whatsappAction,
-  waCallAction,
   smsAction,
   setStatutAction,
 } from "./actions";
@@ -81,7 +80,6 @@ export default function Row({
     );
     return `https://wa.me/${intl}?text=${text}`;
   }
-  const waChatUrl = `https://wa.me/${intl}`;
   const smsUrl = `sms:${contact.telephone}?&body=${encodeURIComponent(
     buildMessage("initial", contact.prenom, donationUrl)
   )}`;
@@ -102,9 +100,6 @@ export default function Row({
     startTransition(() => whatsappAction(contact.id, kind));
   }
 
-  function onWaCall() {
-    startTransition(() => waCallAction(contact.id));
-  }
   function onSms() {
     startTransition(() => smsAction(contact.id));
   }
@@ -197,15 +192,6 @@ export default function Row({
           onClick={(e) => onWhatsApp(e, "initial")}
         >
           <WaIcon /> WhatsApp
-        </a>
-        <a
-          className="btn-wacall"
-          href={waChatUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onWaCall}
-        >
-          <span className="ico">📲</span> Appel WA
         </a>
         <a className="btn-sms" href={smsUrl} onClick={onSms}>
           <span className="ico">💬</span> SMS
