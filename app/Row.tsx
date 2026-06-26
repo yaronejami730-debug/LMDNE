@@ -1,21 +1,30 @@
 "use client";
 
 import { useTransition } from "react";
-import type { Contact } from "@/lib/db";
+import type { Contact, Event } from "@/lib/db";
 import {
   recordCallAction,
   whatsappAction,
   setStatutAction,
 } from "./actions";
 import { buildMessage, toIntl, STATUS_PROGRESS, STATUS_SUIVI } from "@/lib/messages";
-import { timeAgo, formatDate, parseSqlite } from "@/lib/time";
+import { timeAgo, formatStamp, parseSqlite } from "@/lib/time";
+
+const EVENT_META: Record<string, { icon: string; verb: string }> = {
+  appel: { icon: "📞", verb: "a appelé" },
+  whatsapp: { icon: "🟢", verb: "a envoyé le lien par WhatsApp" },
+  relance: { icon: "🔁", verb: "a relancé" },
+  statut: { icon: "📋", verb: "a mis le statut" },
+};
 
 export default function Row({
   contact,
   donationUrl,
+  events,
 }: {
   contact: Contact;
   donationUrl: string;
+  events: Event[];
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -56,43 +65,6 @@ export default function Row({
   const hasOrig =
     contact.orig_note || contact.orig_tag || contact.orig_cat || contact.orig_flag;
 
-  // Timeline chronologique des actions
-  const events = [
-    contact.call_count > 0 && {
-      icon: "📞",
-      label: "a appelé",
-      who: contact.last_call_by,
-      date: contact.last_call_date,
-      n: contact.call_count,
-    },
-    contact.wa_count > 0 && {
-      icon: "🟢",
-      label: "a envoyé le lien par WhatsApp",
-      who: contact.last_wa_by,
-      date: contact.last_wa_date,
-      n: contact.wa_count,
-    },
-    contact.relance_count > 0 && {
-      icon: "🔁",
-      label: "a relancé",
-      who: contact.last_relance_by,
-      date: contact.last_relance_date,
-      n: contact.relance_count,
-    },
-  ]
-    .filter(Boolean)
-    .sort(
-      (a, b) =>
-        (parseSqlite((a as { date: string }).date)?.getTime() ?? 0) -
-        (parseSqlite((b as { date: string }).date)?.getTime() ?? 0)
-    ) as {
-    icon: string;
-    label: string;
-    who: string | null;
-    date: string | null;
-    n: number;
-  }[];
-
   return (
     <div className="row">
       <div className="who">
@@ -126,23 +98,26 @@ export default function Row({
           </div>
         )}
 
-        {/* Timeline des actions */}
+        {/* Timeline des actions (du plus récent au plus ancien) */}
         {events.length > 0 && (
           <div className="timeline">
-            {events.map((ev, i) => (
-              <div className="tl-item" key={i}>
-                <span className="tl-dot">{ev.icon}</span>
-                <div className="tl-body">
-                  <span className="tl-top">
-                    <b>{ev.who || "—"}</b> {ev.label}
-                    {ev.n > 1 ? ` (${ev.n}×)` : ""}
-                  </span>
-                  <span className="tl-time">
-                    {formatDate(ev.date)} · {timeAgo(ev.date)}
-                  </span>
+            {events.map((ev) => {
+              const meta = EVENT_META[ev.type] || { icon: "•", verb: ev.type };
+              return (
+                <div className="tl-item" key={ev.id}>
+                  <span className="tl-dot">{meta.icon}</span>
+                  <div className="tl-body">
+                    <span className="tl-top">
+                      <b>{ev.username || "—"}</b> {meta.verb}
+                      {ev.type === "statut" && ev.detail ? (
+                        <> «&nbsp;{ev.detail}&nbsp;»</>
+                      ) : null}
+                    </span>
+                    <span className="tl-time">{formatStamp(ev.created_at)}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

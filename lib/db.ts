@@ -32,9 +32,6 @@ export type Contact = {
   wa_count: number;
   last_wa_date: string | null;
   last_wa_by: string | null;
-  relance_count: number;
-  last_relance_date: string | null;
-  last_relance_by: string | null;
   orig_note: string | null;
   orig_tag: string | null;
   orig_cat: string | null;
@@ -96,12 +93,18 @@ export async function addContact(
   return id;
 }
 
+// Met à jour le statut (sans journaliser — le log est géré par l'appelant).
 export async function setStatut(id: string, statut: string, by?: string) {
   const { error } = await sb
     .from("contacts")
     .update({ statut, statut_date: new Date().toISOString(), statut_by: by ?? null })
     .eq("id", id);
   if (error) throw error;
+}
+
+// Statut changé manuellement par un user → journalisé dans la timeline.
+export async function setStatutLogged(id: string, statut: string, by?: string) {
+  await setStatut(id, statut, by);
   await logEvent(id, "statut", by, statut);
 }
 
@@ -129,15 +132,7 @@ export async function markWhatsApp(
   if (!c) return;
   const now = new Date().toISOString();
   if (kind === "relance") {
-    const { error } = await sb
-      .from("contacts")
-      .update({
-        relance_count: c.relance_count + 1,
-        last_relance_date: now,
-        last_relance_by: by ?? null,
-      })
-      .eq("id", id);
-    if (error) throw error;
+    // Relance : journalisée seulement (chaque relance = une ligne timeline)
     await logEvent(id, "relance", by);
   } else {
     const { error } = await sb
@@ -167,6 +162,23 @@ export async function logEvent(
     username: username ?? null,
     detail: detail ?? null,
   });
+}
+
+// Tous les événements (paginé), du plus récent au plus ancien.
+export async function listAllEvents(): Promise<Event[]> {
+  const size = 1000;
+  const all: Event[] = [];
+  for (let from = 0; from < 20000; from += size) {
+    const { data, error } = await sb
+      .from("events")
+      .select("*")
+      .order("id", { ascending: false })
+      .range(from, from + size - 1);
+    if (error) throw error;
+    all.push(...((data ?? []) as Event[]));
+    if (!data || data.length < size) break;
+  }
+  return all;
 }
 
 export async function listEvents(contactId: string, limit = 6): Promise<Event[]> {

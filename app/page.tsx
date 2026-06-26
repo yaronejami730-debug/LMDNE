@@ -1,4 +1,4 @@
-import { listContacts, listUsers } from "@/lib/db";
+import { listContacts, listUsers, listAllEvents, type Event } from "@/lib/db";
 import { createContact } from "./actions";
 import { requireSession } from "@/lib/auth";
 import { logoutAction } from "./login/actions";
@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const session = await requireSession();
   const contacts = await listContacts();
+  const events = await listAllEvents();
+  const eventsByContact: Record<string, Event[]> = {};
+  for (const e of events) {
+    (eventsByContact[e.contact_id] ||= []).push(e);
+  }
   const total = contacts.length;
   const appeles = contacts.filter((c) => c.call_count > 0).length;
   const liens = contacts.filter((c) => c.statut === "Lien envoyé").length;
@@ -87,7 +92,11 @@ export default async function Home() {
       {contacts.length === 0 ? (
         <p className="empty">Aucun contact. Ajoutez-en un ci-dessus.</p>
       ) : (
-        <List contacts={contacts} donationUrl={donationUrl} />
+        <List
+          contacts={contacts}
+          donationUrl={donationUrl}
+          eventsByContact={eventsByContact}
+        />
       )}
     </div>
   );

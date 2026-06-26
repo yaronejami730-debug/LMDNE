@@ -337,53 +337,63 @@ button {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 0;
   position: relative;
-  padding-left: 6px;
+  background: #fafbfd;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
 }
 .tl-item {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   position: relative;
-  padding: 4px 0 10px;
+  padding-bottom: 14px;
+}
+.tl-item:last-child {
+  padding-bottom: 0;
 }
 .tl-item:not(:last-child)::before {
   content: "";
   position: absolute;
-  left: 11px;
-  top: 24px;
-  bottom: 0;
+  left: 13px;
+  top: 28px;
+  bottom: -2px;
   width: 2px;
   background: var(--line);
 }
 .tl-dot {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--line);
+  border: 2px solid var(--gold);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 13px;
   flex-shrink: 0;
   z-index: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 .tl-body {
   display: flex;
   flex-direction: column;
-  line-height: 1.3;
+  gap: 2px;
+  padding-top: 2px;
+  line-height: 1.35;
 }
 .tl-top {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text);
 }
 .tl-top b {
   color: var(--navy);
+  font-weight: 700;
 }
 .tl-time {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* filtre */

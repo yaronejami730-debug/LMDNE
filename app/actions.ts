@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   addContact,
-  setStatut,
+  setStatutLogged,
   recordCall,
   markWhatsApp,
   addUser,
@@ -54,7 +54,7 @@ export async function createContact(formData: FormData) {
 }
 
 export async function setStatutAction(id: string, statut: string) {
-  await setStatut(id, statut, await currentUser());
+  await setStatutLogged(id, statut, await currentUser());
   revalidatePath("/");
 }
 

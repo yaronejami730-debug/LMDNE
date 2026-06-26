@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Contact } from "@/lib/db";
+import type { Contact, Event } from "@/lib/db";
 import Row from "./Row";
 
 const PAGE = 50;
@@ -23,9 +23,11 @@ type Filter =
 export default function List({
   contacts,
   donationUrl,
+  eventsByContact,
 }: {
   contacts: Contact[];
   donationUrl: string;
+  eventsByContact: Record<string, Event[]>;
 }) {
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -110,7 +112,12 @@ export default function List({
       </p>
 
       {shown.map((c) => (
-        <Row key={c.id} contact={c} donationUrl={donationUrl} />
+        <Row
+          key={c.id}
+          contact={c}
+          donationUrl={donationUrl}
+          events={eventsByContact[c.id] || []}
+        />
       ))}
 
       {!showAll && filtered.length > PAGE && (

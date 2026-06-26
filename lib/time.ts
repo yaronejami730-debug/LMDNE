@@ -40,6 +40,21 @@ export function formatClock(d: string | null): string {
   return `${dm} ${hm}`;
 }
 
+// "26/06/2026 à 14h32"
+export function formatStamp(d: string | null): string {
+  const date = parseSqlite(d);
+  if (!date) return "";
+  const day = date.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const time = date
+    .toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+    .replace(":", "h");
+  return `${day} à ${time}`;
+}
+
 // "25/06/2026 18:46"
 export function formatDate(d: string | null): string {
   const date = parseSqlite(d);
