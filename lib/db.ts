@@ -70,6 +70,20 @@ export async function listContacts(): Promise<Contact[]> {
   return all;
 }
 
+// Un seul lot de contacts (chargement progressif "petit à petit" côté client).
+export async function listContactsPage(
+  offset: number,
+  limit: number
+): Promise<Contact[]> {
+  const { data, error } = await sb
+    .from("contacts")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+  return (data ?? []) as Contact[];
+}
+
 export async function getContact(id: string): Promise<Contact | undefined> {
   const { data, error } = await sb
     .from("contacts")
@@ -191,6 +205,20 @@ export async function listAllEvents(): Promise<Event[]> {
     if (!data || data.length < size) break;
   }
   return all;
+}
+
+// Un seul lot d'événements (chargement progressif côté client).
+export async function listEventsPage(
+  offset: number,
+  limit: number
+): Promise<Event[]> {
+  const { data, error } = await sb
+    .from("events")
+    .select("*")
+    .order("id", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+  return (data ?? []) as Event[];
 }
 
 export async function listEvents(contactId: string, limit = 6): Promise<Event[]> {
