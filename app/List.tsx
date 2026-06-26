@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import type { Contact, Event } from "@/lib/db";
 import Row from "./Row";
 import { parseSqlite } from "@/lib/time";
 
-const PAGE = 50;
 const RECALL_MIN = 60; // minutes avant qu'un NRP remonte en tête
+const ROW_EST = 200; // hauteur estimée d'une ligne (px), ajustée par mesure réelle
 
 const clean = (v: string | null) => (v ? v.replace(/\.0$/, "") : "");
 
@@ -39,7 +40,6 @@ export default function List({
   waLastHour: number;
 }) {
   const [q, setQ] = useState("");
-  const [visible, setVisible] = useState(PAGE); // nb de lignes rendues (incrémental)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -53,6 +53,7 @@ export default function List({
     for (const s of [
       "Lien envoyé", "Relancé", "Don effectué", "À rappeler",
       "À relancer", "Ne répond pas", "Refusé",
+      "Faux numéro", "Numéro aucun rapport",
     ]) {
       opts.push({ id: "st_" + s, label: s, group: "Statut", test: (c) => c.statut === s });
     }
@@ -126,33 +127,32 @@ export default function List({
 
   const recallCount = useMemo(() => contacts.filter(needsRecall).length, [contacts]);
 
-  // Rendu incrémental : on n'affiche jamais les ~2700 lignes d'un coup (ça fait
-  // sauter le navigateur). On rend `visible` lignes, et on en ajoute par paquets
-  // de PAGE quand le sentinel arrive à l'écran (scroll) ou via le bouton.
-  const shown = filtered.slice(0, visible);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // Virtualisation fenêtrée : seules les lignes proches du viewport sont rendues
+  // dans le DOM. Quand on scrolle (haut ou bas), les lignes qui sortent de l'écran
+  // sont retirées et celles qui entrent sont montées. Le DOM ne contient jamais
+  // les ~2700 lignes -> plus de crash, mémoire constante.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [listTop, setListTop] = useState(0);
 
-  // Remet le compteur à zéro quand le filtre/la recherche change
-  useEffect(() => {
-    setVisible(PAGE);
-  }, [q, selected]);
-
-  // Auto-chargement au scroll
-  useEffect(() => {
-    if (visible >= filtered.length) return;
-    const el = sentinelRef.current;
+  // Décalage du conteneur depuis le haut du document (pour le scroll fenêtré)
+  useLayoutEffect(() => {
+    const el = listRef.current;
     if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisible((v) => Math.min(v + PAGE, filtered.length));
-        }
-      },
-      { rootMargin: "400px" }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [visible, filtered.length]);
+    const measure = () =>
+      setListTop(el.getBoundingClientRect().top + window.scrollY);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  const virtualizer = useWindowVirtualizer({
+    count: filtered.length,
+    estimateSize: () => ROW_EST,
+    overscan: 6, // lignes rendues en plus de part et d'autre du viewport
+    scrollMargin: listTop,
+    getItemKey: (i) => filtered[i].id,
+  });
+  const vItems = virtualizer.getVirtualItems();
 
   // Groupes pour le panneau
   const grouped = useMemo(() => {
@@ -223,29 +223,35 @@ export default function List({
         {filtered.length} contact{filtered.length > 1 ? "s" : ""}
       </p>
 
-      {shown.map((c) => (
-        <Row
-          key={c.id}
-          contact={c}
-          donationUrl={donationUrl}
-          events={eventsByContact[c.id] || []}
-          waLastHour={waLastHour}
-        />
-      ))}
-
-      {visible < filtered.length && (
-        <>
-          <div ref={sentinelRef} aria-hidden style={{ height: 1 }} />
-          <button
-            className="btn-more"
-            onClick={() =>
-              setVisible((v) => Math.min(v + PAGE, filtered.length))
-            }
-          >
-            Afficher plus ({filtered.length - visible} restants)
-          </button>
-        </>
-      )}
+      <div
+        ref={listRef}
+        style={{ position: "relative", height: virtualizer.getTotalSize() }}
+      >
+        {vItems.map((vi) => {
+          const c = filtered[vi.index];
+          return (
+            <div
+              key={vi.key}
+              data-index={vi.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)`,
+              }}
+            >
+              <Row
+                contact={c}
+                donationUrl={donationUrl}
+                events={eventsByContact[c.id] || []}
+                waLastHour={waLastHour}
+              />
+            </div>
+          );
+        })}
+      </div>
     </>
   );
 }

@@ -9,6 +9,8 @@ export const STATUSES = [
   "À relancer",
   "Ne répond pas",
   "Refusé",
+  "Faux numéro",
+  "Numéro aucun rapport",
   "Don effectué",
 ] as const;
 
