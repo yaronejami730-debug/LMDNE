@@ -18,7 +18,13 @@ function needsRecall(c: Contact) {
   return ageMin > RECALL_MIN;
 }
 
-type Group = "Activité" | "Statut" | "Colonne D" | "Colonne E" | "Colonne F";
+type Group =
+  | "Activité"
+  | "Statut"
+  | "Colonne D"
+  | "Colonne E"
+  | "Colonne F"
+  | "Colonne G";
 type Opt = { id: string; label: string; group: Group; test: (c: Contact) => boolean };
 
 export default function List({
@@ -62,6 +68,10 @@ export default function List({
     const fVals = [...new Set(contacts.map((c) => (c.orig_note || "").trim()).filter(Boolean))].sort();
     for (const v of fVals)
       opts.push({ id: "f_" + v, label: "F = " + v, group: "Colonne F", test: (c) => (c.orig_note || "").trim() === v });
+    // Colonne G (toutes les valeurs distinctes)
+    const gVals = [...new Set(contacts.map((c) => (c.orig_tag || "").trim()).filter(Boolean))].sort();
+    for (const v of gVals)
+      opts.push({ id: "g_" + v, label: "G = " + v, group: "Colonne G", test: (c) => (c.orig_tag || "").trim() === v });
     return opts;
   }, [contacts]);
 
