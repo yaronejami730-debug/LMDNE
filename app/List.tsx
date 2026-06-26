@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Contact, Event } from "@/lib/db";
 import Row from "./Row";
 import { parseSqlite } from "@/lib/time";
@@ -39,7 +39,7 @@ export default function List({
   waLastHour: number;
 }) {
   const [q, setQ] = useState("");
-  const [showAll, setShowAll] = useState(false);
+  const [visible, setVisible] = useState(PAGE); // nb de lignes rendues (incrémental)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -87,7 +87,6 @@ export default function List({
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-    setShowAll(false);
   }
 
   const filtered = useMemo(() => {
@@ -126,7 +125,34 @@ export default function List({
   }, [contacts, q, selected, optById]);
 
   const recallCount = useMemo(() => contacts.filter(needsRecall).length, [contacts]);
-  const shown = showAll ? filtered : filtered.slice(0, PAGE);
+
+  // Rendu incrémental : on n'affiche jamais les ~2700 lignes d'un coup (ça fait
+  // sauter le navigateur). On rend `visible` lignes, et on en ajoute par paquets
+  // de PAGE quand le sentinel arrive à l'écran (scroll) ou via le bouton.
+  const shown = filtered.slice(0, visible);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Remet le compteur à zéro quand le filtre/la recherche change
+  useEffect(() => {
+    setVisible(PAGE);
+  }, [q, selected]);
+
+  // Auto-chargement au scroll
+  useEffect(() => {
+    if (visible >= filtered.length) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisible((v) => Math.min(v + PAGE, filtered.length));
+        }
+      },
+      { rootMargin: "400px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible, filtered.length]);
 
   // Groupes pour le panneau
   const grouped = useMemo(() => {
@@ -146,10 +172,7 @@ export default function List({
           className="search"
           placeholder="Rechercher nom, téléphone, note…"
           value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setShowAll(false);
-          }}
+          onChange={(e) => setQ(e.target.value)}
         />
         <button
           className={`filter-btn ${selected.size ? "active" : ""}`}
@@ -210,10 +233,18 @@ export default function List({
         />
       ))}
 
-      {!showAll && filtered.length > PAGE && (
-        <button className="btn-more" onClick={() => setShowAll(true)}>
-          Afficher les {filtered.length - PAGE} restants
-        </button>
+      {visible < filtered.length && (
+        <>
+          <div ref={sentinelRef} aria-hidden style={{ height: 1 }} />
+          <button
+            className="btn-more"
+            onClick={() =>
+              setVisible((v) => Math.min(v + PAGE, filtered.length))
+            }
+          >
+            Afficher plus ({filtered.length - visible} restants)
+          </button>
+        </>
       )}
     </>
   );

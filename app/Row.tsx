@@ -1,13 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { Contact, Event } from "@/lib/db";
-import {
-  recordCallAction,
-  whatsappAction,
-  smsAction,
-  setStatutAction,
-} from "./actions";
 import { buildMessage, toIntl, STATUSES } from "@/lib/messages";
 import { timeAgo, formatStamp, parseSqlite } from "@/lib/time";
 
@@ -54,6 +49,21 @@ export default function Row({
   waLastHour: number;
 }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  // Enregistre l'action via sendBeacon : garanti de partir même si la page
+  // navigue (tel:/sms:) ou est rechargée par iOS. Ne dépend plus d'une requête
+  // qui survit à la navigation -> fiable. router.refresh() rafraîchit l'UI
+  // quand on reste sur la page (WhatsApp/relance en _blank).
+  function track(action: string, statut?: string) {
+    const payload = JSON.stringify({ id: contact.id, action, statut });
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      navigator.sendBeacon("/api/track", payload);
+    } else {
+      fetch("/api/track", { method: "POST", body: payload, keepalive: true });
+    }
+    startTransition(() => router.refresh());
+  }
 
   function onCall(e: React.MouseEvent) {
     const last = parseSqlite(contact.last_call_date);
@@ -70,7 +80,7 @@ export default function Row({
         return;
       }
     }
-    startTransition(() => recordCallAction(contact.id));
+    track("call");
   }
 
   const intl = toIntl(contact.telephone);
@@ -97,15 +107,15 @@ export default function Row({
         return;
       }
     }
-    startTransition(() => whatsappAction(contact.id, kind));
+    track(kind === "relance" ? "relance" : "whatsapp");
   }
 
   function onSms() {
-    startTransition(() => smsAction(contact.id));
+    track("sms");
   }
   function onStatut(v: string) {
     if (!v) return;
-    startTransition(() => setStatutAction(contact.id, v));
+    track("statut", v);
     if (v === "Ne répond pas") {
       window.alert(
         "📞 Ce client n'a pas répondu.\nPensez à le rappeler plus tard — il remontera en tête de liste."
