@@ -134,8 +134,9 @@ export async function markWhatsApp(
   if (!c) return;
   const now = new Date().toISOString();
   if (kind === "relance") {
-    // Relance : journalisée seulement (chaque relance = une ligne timeline)
+    // Relance : journalisée + statut "Relancé"
     await logEvent(id, "relance", by);
+    await setStatut(id, "Relancé", by);
   } else {
     const { error } = await sb
       .from("contacts")
@@ -149,6 +150,11 @@ export async function markWhatsApp(
     await logEvent(id, "whatsapp", by);
     await setStatut(id, "Lien envoyé", by);
   }
+}
+
+// Appel WhatsApp (ouvre la conversation) — journalisé.
+export async function markWaCall(id: string, by?: string) {
+  await logEvent(id, "appel_wa", by);
 }
 
 // SMS (lien sms: auto-rempli) — journalisé + statut Lien envoyé

@@ -195,6 +195,31 @@ body {
   padding: 2px 8px;
   border-radius: 999px;
 }
+/* badge de statut courant */
+.st-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #374151;
+}
+.st-badge.st-blue {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.st-badge.st-purple {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.st-badge.st-green {
+  background: #dcfce7;
+  color: #166534;
+}
+.st-badge.st-gray {
+  background: #e5e7eb;
+  color: #4b5563;
+}
 .stat-btn {
   cursor: pointer;
   text-align: left;
@@ -590,6 +615,10 @@ button {
 .btn-wa {
   background: linear-gradient(180deg, #25d366, #1da851);
   box-shadow: 0 2px 8px rgba(29, 168, 81, 0.25);
+}
+.btn-wacall {
+  background: linear-gradient(180deg, #128c7e, #075e54);
+  box-shadow: 0 2px 8px rgba(7, 94, 84, 0.3);
 }
 .btn-sms {
   background: linear-gradient(180deg, #0ea5e9, #0284c7);

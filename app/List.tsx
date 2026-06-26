@@ -3,8 +3,18 @@
 import { useMemo, useState } from "react";
 import type { Contact, Event } from "@/lib/db";
 import Row from "./Row";
+import { parseSqlite } from "@/lib/time";
 
 const PAGE = 50;
+const RECALL_MIN = 60; // minutes avant qu'un NRP remonte en tête
+
+// NRP/à rappeler sans action depuis > 1 h → à rappeler maintenant
+function needsRecall(c: Contact) {
+  if (c.statut !== "Ne répond pas" && c.statut !== "À rappeler") return false;
+  const t = parseSqlite(c.statut_date);
+  const ageMin = t ? (Date.now() - t.getTime()) / 60000 : Infinity;
+  return ageMin > RECALL_MIN;
+}
 
 type Filter =
   | "tous"
@@ -23,7 +33,8 @@ type Filter =
   | "e_1"
   | "e_2"
   | "e_3"
-  | "e_g";
+  | "e_g"
+  | "faux";
 
 const clean = (v: string | null) => (v ? v.replace(/\.0$/, "") : "");
 
@@ -79,6 +90,10 @@ export default function List({
         case "e_g":
           if (clean(c.orig_cat).toUpperCase() !== "G") return false;
           break;
+        case "faux":
+          if (!/faux|pas le bon|n'ai pas|pas mr/i.test(c.orig_note || ""))
+            return false;
+          break;
         case "tous":
           break;
         default:
@@ -87,20 +102,19 @@ export default function List({
       if (!s) return true;
       return (
         `${c.prenom} ${c.nom}`.toLowerCase().includes(s) ||
-        c.telephone.includes(s)
+        c.telephone.includes(s) ||
+        (c.orig_note || "").toLowerCase().includes(s) ||
+        (c.orig_tag || "").toLowerCase().includes(s)
       );
     });
-    // Remonte en tête les clients à rappeler (sans réponse)
-    const recall = (c: Contact) =>
-      c.statut === "Ne répond pas" || c.statut === "À rappeler" ? 0 : 1;
-    return [...arr].sort((a, b) => recall(a) - recall(b));
+    // Remonte en tête les clients à rappeler (sans réponse depuis > 1 h)
+    return [...arr].sort(
+      (a, b) => (needsRecall(a) ? 0 : 1) - (needsRecall(b) ? 0 : 1)
+    );
   }, [contacts, q, filter]);
 
   const recallCount = useMemo(
-    () =>
-      contacts.filter(
-        (c) => c.statut === "Ne répond pas" || c.statut === "À rappeler"
-      ).length,
+    () => contacts.filter(needsRecall).length,
     [contacts]
   );
 
@@ -133,14 +147,15 @@ export default function List({
           <option value="a_relancer">À relancer (en cours)</option>
           <optgroup label="Statut">
             <option value="Lien envoyé">Lien envoyé</option>
+            <option value="Relancé">Relancé</option>
             <option value="Don effectué">Don effectué</option>
-            <option value="Terminé">Terminé</option>
             <option value="À rappeler">À rappeler</option>
             <option value="À relancer">À relancer</option>
             <option value="Ne répond pas">Ne répond pas</option>
             <option value="Refusé">Refusé</option>
           </optgroup>
           <optgroup label="Données initiales (tableau)">
+            <option value="faux">Faux numéro (col F)</option>
             <option value="d_x">Colonne D = X</option>
             <option value="e_1">Colonne E = 1</option>
             <option value="e_2">Colonne E = 2</option>

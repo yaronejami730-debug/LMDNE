@@ -5,10 +5,11 @@ import type { Contact, Event } from "@/lib/db";
 import {
   recordCallAction,
   whatsappAction,
+  waCallAction,
   smsAction,
   setStatutAction,
 } from "./actions";
-import { buildMessage, toIntl, STATUS_PROGRESS, STATUS_SUIVI } from "@/lib/messages";
+import { buildMessage, toIntl, STATUSES } from "@/lib/messages";
 import { timeAgo, formatStamp, parseSqlite } from "@/lib/time";
 
 // Au-delà de ce nombre de WhatsApp/relances par user en 1 h, on avertit (risque ban)
@@ -27,10 +28,19 @@ const WaIcon = () => (
 
 const EVENT_META: Record<string, { icon: string; verb: string }> = {
   appel: { icon: "📞", verb: "a appelé" },
+  appel_wa: { icon: "📲", verb: "a appelé sur WhatsApp" },
   whatsapp: { icon: "🟢", verb: "a envoyé le lien par WhatsApp" },
   sms: { icon: "💬", verb: "a envoyé le lien par SMS" },
   relance: { icon: "🔁", verb: "a relancé" },
   statut: { icon: "📋", verb: "a mis le statut" },
+};
+
+// Couleur du badge de statut courant
+const STATUS_CLASS: Record<string, string> = {
+  "Lien envoyé": "st-blue",
+  Relancé: "st-purple",
+  "Don effectué": "st-green",
+  Refusé: "st-gray",
 };
 
 export default function Row({
@@ -47,7 +57,6 @@ export default function Row({
   const [pending, startTransition] = useTransition();
 
   function onCall(e: React.MouseEvent) {
-    // Avertir seulement si appelé il y a moins de 5 minutes
     const last = parseSqlite(contact.last_call_date);
     const within5 = last && Date.now() - last.getTime() < 5 * 60 * 1000;
     if (within5) {
@@ -65,19 +74,19 @@ export default function Row({
     startTransition(() => recordCallAction(contact.id));
   }
 
+  const intl = toIntl(contact.telephone);
   function waUrl(kind: "initial" | "relance") {
     const text = encodeURIComponent(
       buildMessage(kind, contact.prenom, donationUrl)
     );
-    return `https://wa.me/${toIntl(contact.telephone)}?text=${text}`;
+    return `https://wa.me/${intl}?text=${text}`;
   }
-
+  const waChatUrl = `https://wa.me/${intl}`;
   const smsUrl = `sms:${contact.telephone}?&body=${encodeURIComponent(
     buildMessage("initial", contact.prenom, donationUrl)
   )}`;
 
   function onWhatsApp(e: React.MouseEvent, kind: "initial" | "relance") {
-    // Avertissement anti-ban : > 40 WhatsApp/relances en 1 h par ce user
     if (waLastHour >= SPAM_THRESHOLD) {
       const ok = window.confirm(
         `⚠️ ATTENTION : vous avez envoyé ${waLastHour} WhatsApp en moins d'une heure.\n\n` +
@@ -93,16 +102,18 @@ export default function Row({
     startTransition(() => whatsappAction(contact.id, kind));
   }
 
+  function onWaCall() {
+    startTransition(() => waCallAction(contact.id));
+  }
   function onSms() {
     startTransition(() => smsAction(contact.id));
   }
-
   function onStatut(v: string) {
     if (!v) return;
     startTransition(() => setStatutAction(contact.id, v));
     if (v === "Ne répond pas") {
       window.alert(
-        "📞 Ce client n'a pas répondu.\nPensez à le rappeler plus tard — il remonte en tête de liste."
+        "📞 Ce client n'a pas répondu.\nPensez à le rappeler plus tard — il remontera en tête de liste."
       );
     }
   }
@@ -110,8 +121,12 @@ export default function Row({
   const recall =
     contact.statut === "Ne répond pas" || contact.statut === "À rappeler";
 
-  const hasNote = contact.orig_note || contact.orig_tag;
-  const hasDE = contact.orig_flag || contact.orig_cat;
+  // Données initiales du tableau (colonnes F, G, D, E)
+  const hasOrig =
+    contact.orig_note || contact.orig_tag || contact.orig_flag || contact.orig_cat;
+
+  const statusBadge =
+    contact.statut !== "À appeler" && !recall ? contact.statut : null;
 
   return (
     <div className={`row ${recall ? "recall" : ""}`}>
@@ -121,23 +136,13 @@ export default function Row({
             {contact.prenom} {contact.nom}
           </b>
           {recall && <span className="recall-tag">📞 à rappeler</span>}
+          {statusBadge && (
+            <span className={`st-badge ${STATUS_CLASS[statusBadge] || ""}`}>
+              {statusBadge}
+            </span>
+          )}
         </div>
         <small className="tel">{contact.telephone}</small>
-
-        {/* Commentaire d'origine + initiales */}
-        {hasNote && (
-          <div className="annot">
-            <span className="annot-label">Base :</span>
-            {contact.orig_note && (
-              <span className="annot-note">📝 {contact.orig_note}</span>
-            )}
-            {contact.orig_tag && (
-              <span className="chip chip-tag" title="Initiales (col G)">
-                {contact.orig_tag}
-              </span>
-            )}
-          </div>
-        )}
 
         {/* Timeline des actions (du plus récent au plus ancien) */}
         {events.length > 0 && (
@@ -163,29 +168,16 @@ export default function Row({
         )}
       </div>
 
-      {/* Deux menus déroulants */}
+      {/* Statut manuel (un seul menu) */}
       <div className="status-col">
         <select
           className="status-select"
-          value={STATUS_PROGRESS.includes(contact.statut as never) ? contact.statut : ""}
+          value={STATUSES.includes(contact.statut as never) ? contact.statut : ""}
           onChange={(e) => onStatut(e.target.value)}
           disabled={pending}
         >
-          <option value="">— Avancement —</option>
-          {STATUS_PROGRESS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          className="status-select"
-          value={STATUS_SUIVI.includes(contact.statut as never) ? contact.statut : ""}
-          onChange={(e) => onStatut(e.target.value)}
-          disabled={pending}
-        >
-          <option value="">— Suivi —</option>
-          {STATUS_SUIVI.map((s) => (
+          <option value="">— Statut —</option>
+          {STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
@@ -206,6 +198,15 @@ export default function Row({
         >
           <WaIcon /> WhatsApp
         </a>
+        <a
+          className="btn-wacall"
+          href={waChatUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onWaCall}
+        >
+          <span className="ico">📲</span> Appel WA
+        </a>
         <a className="btn-sms" href={smsUrl} onClick={onSms}>
           <span className="ico">💬</span> SMS
         </a>
@@ -220,10 +221,16 @@ export default function Row({
         </a>
       </div>
 
-      {/* Valeurs brutes colonnes D & E (coin bas-droite) */}
-      {hasDE && (
+      {/* Données initiales du tableau (colonnes F, G, D, E) */}
+      {hasOrig && (
         <div className="orig-de">
           <span className="orig-de-label">Données initiales du tableau</span>
+          {contact.orig_note && (
+            <span className="orig-de-val">F : {contact.orig_note}</span>
+          )}
+          {contact.orig_tag && (
+            <span className="orig-de-val">G : {contact.orig_tag}</span>
+          )}
           {contact.orig_flag && (
             <span className="orig-de-val">D : {cleanVal(contact.orig_flag)}</span>
           )}
