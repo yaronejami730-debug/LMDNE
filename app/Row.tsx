@@ -5,14 +5,30 @@ import type { Contact, Event } from "@/lib/db";
 import {
   recordCallAction,
   whatsappAction,
+  smsAction,
   setStatutAction,
 } from "./actions";
 import { buildMessage, toIntl, STATUS_PROGRESS, STATUS_SUIVI } from "@/lib/messages";
 import { timeAgo, formatStamp, parseSqlite } from "@/lib/time";
 
+// Au-delà de ce nombre de WhatsApp/relances par user en 1 h, on avertit (risque ban)
+const SPAM_THRESHOLD = 40;
+
+// "1.0" -> "1", "G" -> "G"
+function cleanVal(v: string) {
+  return v.replace(/\.0$/, "");
+}
+
+const WaIcon = () => (
+  <svg viewBox="0 0 32 32" width="16" height="16" fill="currentColor" aria-hidden>
+    <path d="M16 0C7.2 0 0 7.2 0 16c0 2.8.7 5.5 2.1 7.9L0 32l8.3-2.2C10.6 31.2 13.3 32 16 32c8.8 0 16-7.2 16-16S24.8 0 16 0zm0 29.3c-2.5 0-4.9-.7-7-1.9l-.5-.3-4.9 1.3 1.3-4.8-.3-.5C3.4 21 2.7 18.5 2.7 16 2.7 8.7 8.7 2.7 16 2.7S29.3 8.7 29.3 16 23.3 29.3 16 29.3zm7.4-9.9c-.4-.2-2.4-1.2-2.8-1.3-.4-.1-.6-.2-.9.2-.3.4-1 1.3-1.3 1.6-.2.3-.5.3-.9.1-.4-.2-1.7-.6-3.2-2-1.2-1-2-2.4-2.2-2.8-.2-.4 0-.6.2-.8.2-.2.4-.5.6-.7.2-.2.3-.4.4-.7.1-.3 0-.5 0-.7-.1-.2-.9-2.2-1.3-3-.3-.7-.6-.6-.9-.6h-.7c-.2 0-.6.1-1 .5-.3.4-1.3 1.3-1.3 3.1s1.3 3.6 1.5 3.9c.2.3 2.6 4 6.3 5.6.9.4 1.6.6 2.1.8.9.3 1.7.2 2.3.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.6.2-1.7-.1-.2-.3-.3-.7-.5z" />
+  </svg>
+);
+
 const EVENT_META: Record<string, { icon: string; verb: string }> = {
   appel: { icon: "📞", verb: "a appelé" },
   whatsapp: { icon: "🟢", verb: "a envoyé le lien par WhatsApp" },
+  sms: { icon: "💬", verb: "a envoyé le lien par SMS" },
   relance: { icon: "🔁", verb: "a relancé" },
   statut: { icon: "📋", verb: "a mis le statut" },
 };
@@ -21,10 +37,12 @@ export default function Row({
   contact,
   donationUrl,
   events,
+  waLastHour,
 }: {
   contact: Contact;
   donationUrl: string;
   events: Event[];
+  waLastHour: number;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -54,44 +72,67 @@ export default function Row({
     return `https://wa.me/${toIntl(contact.telephone)}?text=${text}`;
   }
 
-  function onWhatsApp(kind: "initial" | "relance") {
+  const smsUrl = `sms:${contact.telephone}?&body=${encodeURIComponent(
+    buildMessage("initial", contact.prenom, donationUrl)
+  )}`;
+
+  function onWhatsApp(e: React.MouseEvent, kind: "initial" | "relance") {
+    // Avertissement anti-ban : > 40 WhatsApp/relances en 1 h par ce user
+    if (waLastHour >= SPAM_THRESHOLD) {
+      const ok = window.confirm(
+        `⚠️ ATTENTION : vous avez envoyé ${waLastHour} WhatsApp en moins d'une heure.\n\n` +
+          `Risque de blocage ou d'accès restreint sur WhatsApp.\n` +
+          `👉 Pour éviter ça, passez par un autre canal : envoyez le lien par SMS.\n\n` +
+          `Continuer quand même en WhatsApp ?`
+      );
+      if (!ok) {
+        e.preventDefault();
+        return;
+      }
+    }
     startTransition(() => whatsappAction(contact.id, kind));
   }
 
-  function onStatut(v: string) {
-    if (v) startTransition(() => setStatutAction(contact.id, v));
+  function onSms() {
+    startTransition(() => smsAction(contact.id));
   }
 
-  const hasOrig =
-    contact.orig_note || contact.orig_tag || contact.orig_cat || contact.orig_flag;
+  function onStatut(v: string) {
+    if (!v) return;
+    startTransition(() => setStatutAction(contact.id, v));
+    if (v === "Ne répond pas") {
+      window.alert(
+        "📞 Ce client n'a pas répondu.\nPensez à le rappeler plus tard — il remonte en tête de liste."
+      );
+    }
+  }
+
+  const recall =
+    contact.statut === "Ne répond pas" || contact.statut === "À rappeler";
+
+  const hasNote = contact.orig_note || contact.orig_tag;
+  const hasDE = contact.orig_flag || contact.orig_cat;
 
   return (
-    <div className="row">
+    <div className={`row ${recall ? "recall" : ""}`}>
       <div className="who">
-        <b>
-          {contact.prenom} {contact.nom}
-        </b>
+        <div className="who-head">
+          <b>
+            {contact.prenom} {contact.nom}
+          </b>
+          {recall && <span className="recall-tag">📞 à rappeler</span>}
+        </div>
         <small className="tel">{contact.telephone}</small>
 
-        {/* Données d'origine du fichier */}
-        {hasOrig && (
+        {/* Commentaire d'origine + initiales */}
+        {hasNote && (
           <div className="annot">
             <span className="annot-label">Base :</span>
             {contact.orig_note && (
               <span className="annot-note">📝 {contact.orig_note}</span>
             )}
-            {contact.orig_flag && (
-              <span className="chip chip-flag" title="Colonne D">
-                {contact.orig_flag}
-              </span>
-            )}
-            {contact.orig_cat && (
-              <span className="chip chip-cat" title="Colonne E">
-                {contact.orig_cat}
-              </span>
-            )}
             {contact.orig_tag && (
-              <span className="chip chip-tag" title="Colonne G">
+              <span className="chip chip-tag" title="Initiales (col G)">
                 {contact.orig_tag}
               </span>
             )}
@@ -161,20 +202,36 @@ export default function Row({
           href={waUrl("initial")}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => onWhatsApp("initial")}
+          onClick={(e) => onWhatsApp(e, "initial")}
         >
-          <span className="ico">🟢</span> WhatsApp
+          <WaIcon /> WhatsApp
+        </a>
+        <a className="btn-sms" href={smsUrl} onClick={onSms}>
+          <span className="ico">💬</span> SMS
         </a>
         <a
           className="btn-relance"
           href={waUrl("relance")}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => onWhatsApp("relance")}
+          onClick={(e) => onWhatsApp(e, "relance")}
         >
           <span className="ico">🔁</span> Relancer
         </a>
       </div>
+
+      {/* Valeurs brutes colonnes D & E (coin bas-droite) */}
+      {hasDE && (
+        <div className="orig-de">
+          <span className="orig-de-label">Données initiales du tableau</span>
+          {contact.orig_flag && (
+            <span className="orig-de-val">D : {cleanVal(contact.orig_flag)}</span>
+          )}
+          {contact.orig_cat && (
+            <span className="orig-de-val">E : {cleanVal(contact.orig_cat)}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

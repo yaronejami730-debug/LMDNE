@@ -5,6 +5,9 @@ import { logoutAction } from "./login/actions";
 import List from "./List";
 import AdminPanel from "./AdminPanel";
 import Countdown from "./Countdown";
+import StatsPanel from "./StatsPanel";
+
+export type UserStats = { appel: number; wa: number; sms: number; relance: number };
 
 export const dynamic = "force-dynamic";
 
@@ -13,20 +16,34 @@ export default async function Home() {
   const contacts = await listContacts();
   const events = await listAllEvents();
   const eventsByContact: Record<string, Event[]> = {};
+  const statsByUser: Record<string, UserStats> = {};
+  // WhatsApp/relances envoyés par le user connecté dans la dernière heure (anti-spam)
+  const hourAgo = Date.now() - 3600_000;
+  let waLastHour = 0;
   for (const e of events) {
     (eventsByContact[e.contact_id] ||= []).push(e);
+    if (
+      (e.type === "whatsapp" || e.type === "relance") &&
+      e.username === session.username &&
+      new Date(e.created_at).getTime() >= hourAgo
+    ) {
+      waLastHour++;
+    }
+    const u = e.username || "—";
+    const s = (statsByUser[u] ||= { appel: 0, wa: 0, sms: 0, relance: 0 });
+    if (e.type === "appel") s.appel++;
+    else if (e.type === "whatsapp") s.wa++;
+    else if (e.type === "sms") s.sms++;
+    else if (e.type === "relance") s.relance++;
   }
-  const total = contacts.length;
   const appeles = contacts.filter((c) => c.call_count > 0).length;
-  const liens = contacts.filter((c) => c.statut === "Lien envoyé").length;
+  const liens = contacts.filter(
+    (c) => c.wa_count > 0 || c.sms_count > 0
+  ).length;
+  const nrp = contacts.filter((c) => c.statut === "Ne répond pas").length;
   const donationUrl = process.env.DONATION_URL || "http://Charithon.io/lmne-2026";
 
   const isAdmin = session.role === "admin";
-  const aRelancer = contacts.filter(
-    (c) =>
-      c.statut !== "À appeler" &&
-      !["Don effectué", "Refus", "Faux numéro", "Terminé"].includes(c.statut)
-  ).length;
 
   return (
     <div className="wrap">
@@ -58,21 +75,18 @@ export default async function Home() {
 
       <div className="stats">
         <div className="stat">
-          <b>{total}</b>
-          <span>Contacts</span>
-        </div>
-        <div className="stat">
           <b>{appeles}</b>
-          <span>Appelés</span>
+          <span>Personnes appelées</span>
         </div>
         <div className="stat">
           <b>{liens}</b>
-          <span>Lien envoyé</span>
+          <span>Liens envoyés</span>
         </div>
-        <div className="stat warn">
-          <b>{aRelancer}</b>
-          <span>À relancer</span>
+        <div className="stat nrp">
+          <b>{nrp}</b>
+          <span>Ne répond pas (NRP)</span>
         </div>
+        <StatsPanel stats={statsByUser} />
       </div>
 
       <form className="add" action={createContact}>
@@ -96,6 +110,7 @@ export default async function Home() {
           contacts={contacts}
           donationUrl={donationUrl}
           eventsByContact={eventsByContact}
+          waLastHour={waLastHour}
         />
       )}
     </div>

@@ -18,16 +18,25 @@ type Filter =
   | "À rappeler"
   | "À relancer"
   | "Ne répond pas"
-  | "Refusé";
+  | "Refusé"
+  | "d_x"
+  | "e_1"
+  | "e_2"
+  | "e_3"
+  | "e_g";
+
+const clean = (v: string | null) => (v ? v.replace(/\.0$/, "") : "");
 
 export default function List({
   contacts,
   donationUrl,
   eventsByContact,
+  waLastHour,
 }: {
   contacts: Contact[];
   donationUrl: string;
   eventsByContact: Record<string, Event[]>;
+  waLastHour: number;
 }) {
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -35,7 +44,7 @@ export default function List({
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return contacts.filter((c) => {
+    const arr = contacts.filter((c) => {
       // filtre
       switch (filter) {
         case "appeles":
@@ -55,6 +64,21 @@ export default function List({
           )
             return false;
           break;
+        case "d_x":
+          if (clean(c.orig_flag).toUpperCase() !== "X") return false;
+          break;
+        case "e_1":
+          if (clean(c.orig_cat) !== "1") return false;
+          break;
+        case "e_2":
+          if (clean(c.orig_cat) !== "2") return false;
+          break;
+        case "e_3":
+          if (clean(c.orig_cat) !== "3") return false;
+          break;
+        case "e_g":
+          if (clean(c.orig_cat).toUpperCase() !== "G") return false;
+          break;
         case "tous":
           break;
         default:
@@ -66,7 +90,19 @@ export default function List({
         c.telephone.includes(s)
       );
     });
+    // Remonte en tête les clients à rappeler (sans réponse)
+    const recall = (c: Contact) =>
+      c.statut === "Ne répond pas" || c.statut === "À rappeler" ? 0 : 1;
+    return [...arr].sort((a, b) => recall(a) - recall(b));
   }, [contacts, q, filter]);
+
+  const recallCount = useMemo(
+    () =>
+      contacts.filter(
+        (c) => c.statut === "Ne répond pas" || c.statut === "À rappeler"
+      ).length,
+    [contacts]
+  );
 
   const shown = showAll ? filtered : filtered.slice(0, PAGE);
 
@@ -104,8 +140,22 @@ export default function List({
             <option value="Ne répond pas">Ne répond pas</option>
             <option value="Refusé">Refusé</option>
           </optgroup>
+          <optgroup label="Données initiales (tableau)">
+            <option value="d_x">Colonne D = X</option>
+            <option value="e_1">Colonne E = 1</option>
+            <option value="e_2">Colonne E = 2</option>
+            <option value="e_3">Colonne E = 3</option>
+            <option value="e_g">Colonne E = G</option>
+          </optgroup>
         </select>
       </div>
+
+      {recallCount > 0 && (
+        <div className="recall-banner">
+          📞 <b>{recallCount}</b> client{recallCount > 1 ? "s" : ""} sans réponse
+          — à rappeler (remontés en tête)
+        </div>
+      )}
 
       <p className="count">
         {filtered.length} contact{filtered.length > 1 ? "s" : ""}
@@ -117,6 +167,7 @@ export default function List({
           contact={c}
           donationUrl={donationUrl}
           events={eventsByContact[c.id] || []}
+          waLastHour={waLastHour}
         />
       ))}
 

@@ -32,6 +32,8 @@ export type Contact = {
   wa_count: number;
   last_wa_date: string | null;
   last_wa_by: string | null;
+  sms_count: number;
+  last_sms_date: string | null;
   orig_note: string | null;
   orig_tag: string | null;
   orig_cat: string | null;
@@ -147,6 +149,22 @@ export async function markWhatsApp(
     await logEvent(id, "whatsapp", by);
     await setStatut(id, "Lien envoyé", by);
   }
+}
+
+// SMS (lien sms: auto-rempli) — journalisé + statut Lien envoyé
+export async function markSms(id: string, by?: string) {
+  const c = await getContact(id);
+  if (!c) return;
+  const { error } = await sb
+    .from("contacts")
+    .update({
+      sms_count: c.sms_count + 1,
+      last_sms_date: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+  await logEvent(id, "sms", by);
+  await setStatut(id, "Lien envoyé", by);
 }
 
 // ---- Événements ----

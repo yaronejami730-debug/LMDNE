@@ -6,6 +6,7 @@ import {
   setStatutLogged,
   recordCall,
   markWhatsApp,
+  markSms,
   addUser,
   deleteUser,
   type Role,
@@ -70,5 +71,11 @@ export async function whatsappAction(
   kind: "initial" | "relance" = "initial"
 ) {
   await markWhatsApp(id, await currentUser(), kind);
+  revalidatePath("/");
+}
+
+// SMS : enregistre qui + quand + statut.
+export async function smsAction(id: string) {
+  await markSms(id, await currentUser());
   revalidatePath("/");
 }
