@@ -564,6 +564,70 @@ button {
   font-weight: 600;
   min-width: 180px;
 }
+.filter-btn {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.filter-btn.active {
+  background: var(--navy);
+  color: #fff;
+  border-color: var(--navy);
+}
+.filter-clear {
+  background: #fee2e2;
+  color: #991b1b;
+  border: none;
+}
+.filter-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.fp-group {
+  margin-bottom: 12px;
+}
+.fp-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fp-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fp-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  max-width: 100%;
+}
+.fp-opt.on {
+  background: var(--navy);
+  color: #fff;
+  border-color: var(--navy);
+}
+.fp-opt input {
+  margin: 0;
+  width: 13px;
+  height: 13px;
+}
 
 /* statut */
 .status-col {

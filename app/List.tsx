@@ -8,6 +8,8 @@ import { parseSqlite } from "@/lib/time";
 const PAGE = 50;
 const RECALL_MIN = 60; // minutes avant qu'un NRP remonte en tête
 
+const clean = (v: string | null) => (v ? v.replace(/\.0$/, "") : "");
+
 // NRP/à rappeler sans action depuis > 1 h → à rappeler maintenant
 function needsRecall(c: Contact) {
   if (c.statut !== "Ne répond pas" && c.statut !== "À rappeler") return false;
@@ -16,27 +18,8 @@ function needsRecall(c: Contact) {
   return ageMin > RECALL_MIN;
 }
 
-type Filter =
-  | "tous"
-  | "appeles"
-  | "pas_appeles"
-  | "whatsapp"
-  | "a_relancer"
-  | "Lien envoyé"
-  | "Don effectué"
-  | "Terminé"
-  | "À rappeler"
-  | "À relancer"
-  | "Ne répond pas"
-  | "Refusé"
-  | "d_x"
-  | "e_1"
-  | "e_2"
-  | "e_3"
-  | "e_g"
-  | "faux";
-
-const clean = (v: string | null) => (v ? v.replace(/\.0$/, "") : "");
+type Group = "Activité" | "Statut" | "Colonne D" | "Colonne E" | "Colonne F";
+type Opt = { id: string; label: string; group: Group; test: (c: Contact) => boolean };
 
 export default function List({
   contacts,
@@ -51,53 +34,67 @@ export default function List({
 }) {
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const [filter, setFilter] = useState<Filter>("tous");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  // Options de filtre (dont valeurs distinctes D / E / F du fichier)
+  const options = useMemo<Opt[]>(() => {
+    const opts: Opt[] = [
+      { id: "appeles", label: "Déjà appelés", group: "Activité", test: (c) => c.call_count > 0 },
+      { id: "pas_appeles", label: "Pas encore appelés", group: "Activité", test: (c) => c.call_count === 0 },
+      { id: "whatsapp", label: "WhatsApp envoyé", group: "Activité", test: (c) => c.wa_count > 0 },
+    ];
+    for (const s of [
+      "Lien envoyé", "Relancé", "Don effectué", "À rappeler",
+      "À relancer", "Ne répond pas", "Refusé",
+    ]) {
+      opts.push({ id: "st_" + s, label: s, group: "Statut", test: (c) => c.statut === s });
+    }
+    // Colonne D (valeurs distinctes)
+    const dVals = [...new Set(contacts.map((c) => clean(c.orig_flag)).filter(Boolean))].sort();
+    for (const v of dVals)
+      opts.push({ id: "d_" + v, label: "D = " + v, group: "Colonne D", test: (c) => clean(c.orig_flag) === v });
+    // Colonne E (valeurs distinctes)
+    const eVals = [...new Set(contacts.map((c) => clean(c.orig_cat)).filter(Boolean))].sort();
+    for (const v of eVals)
+      opts.push({ id: "e_" + v, label: "E = " + v, group: "Colonne E", test: (c) => clean(c.orig_cat) === v });
+    // Colonne F (toutes les valeurs distinctes)
+    const fVals = [...new Set(contacts.map((c) => (c.orig_note || "").trim()).filter(Boolean))].sort();
+    for (const v of fVals)
+      opts.push({ id: "f_" + v, label: "F = " + v, group: "Colonne F", test: (c) => (c.orig_note || "").trim() === v });
+    return opts;
+  }, [contacts]);
+
+  const optById = useMemo(() => {
+    const m = new Map<string, Opt>();
+    for (const o of options) m.set(o.id, o);
+    return m;
+  }, [options]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+    setShowAll(false);
+  }
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
+    // Regroupe les options sélectionnées par groupe (OR intra-groupe, AND inter-groupes)
+    const activeByGroup = new Map<Group, Opt[]>();
+    for (const id of selected) {
+      const o = optById.get(id);
+      if (!o) continue;
+      const arr = activeByGroup.get(o.group) || [];
+      arr.push(o);
+      activeByGroup.set(o.group, arr);
+    }
+
     const arr = contacts.filter((c) => {
-      // filtre
-      switch (filter) {
-        case "appeles":
-          if (c.call_count === 0) return false;
-          break;
-        case "pas_appeles":
-          if (c.call_count > 0) return false;
-          break;
-        case "whatsapp":
-          if (c.wa_count === 0) return false;
-          break;
-        case "a_relancer":
-          // contactés mais pas finalisés
-          if (
-            c.statut === "À appeler" ||
-            ["Don effectué", "Refusé", "Terminé"].includes(c.statut)
-          )
-            return false;
-          break;
-        case "d_x":
-          if (clean(c.orig_flag).toUpperCase() !== "X") return false;
-          break;
-        case "e_1":
-          if (clean(c.orig_cat) !== "1") return false;
-          break;
-        case "e_2":
-          if (clean(c.orig_cat) !== "2") return false;
-          break;
-        case "e_3":
-          if (clean(c.orig_cat) !== "3") return false;
-          break;
-        case "e_g":
-          if (clean(c.orig_cat).toUpperCase() !== "G") return false;
-          break;
-        case "faux":
-          if (!/faux|pas le bon|n'ai pas|pas mr/i.test(c.orig_note || ""))
-            return false;
-          break;
-        case "tous":
-          break;
-        default:
-          if (c.statut !== filter) return false;
+      for (const [, opts] of activeByGroup) {
+        if (!opts.some((o) => o.test(c))) return false;
       }
       if (!s) return true;
       return (
@@ -107,63 +104,80 @@ export default function List({
         (c.orig_tag || "").toLowerCase().includes(s)
       );
     });
-    // Remonte en tête les clients à rappeler (sans réponse depuis > 1 h)
-    return [...arr].sort(
-      (a, b) => (needsRecall(a) ? 0 : 1) - (needsRecall(b) ? 0 : 1)
-    );
-  }, [contacts, q, filter]);
 
-  const recallCount = useMemo(
-    () => contacts.filter(needsRecall).length,
-    [contacts]
-  );
+    // Tri : clients à rappeler en tête, puis ordre alphabétique (nom, prénom)
+    return [...arr].sort((a, b) => {
+      const r = (needsRecall(a) ? 0 : 1) - (needsRecall(b) ? 0 : 1);
+      if (r) return r;
+      return `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, "fr", {
+        sensitivity: "base",
+      });
+    });
+  }, [contacts, q, selected, optById]);
 
+  const recallCount = useMemo(() => contacts.filter(needsRecall).length, [contacts]);
   const shown = showAll ? filtered : filtered.slice(0, PAGE);
+
+  // Groupes pour le panneau
+  const grouped = useMemo(() => {
+    const g = new Map<Group, Opt[]>();
+    for (const o of options) {
+      const arr = g.get(o.group) || [];
+      arr.push(o);
+      g.set(o.group, arr);
+    }
+    return [...g.entries()];
+  }, [options]);
 
   return (
     <>
       <div className="toolbar">
         <input
           className="search"
-          placeholder="Rechercher nom ou téléphone…"
+          placeholder="Rechercher nom, téléphone, note…"
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
             setShowAll(false);
           }}
         />
-        <select
-          className="filter-select"
-          value={filter}
-          onChange={(e) => {
-            setFilter(e.target.value as Filter);
-            setShowAll(false);
-          }}
+        <button
+          className={`filter-btn ${selected.size ? "active" : ""}`}
+          onClick={() => setPanelOpen((o) => !o)}
         >
-          <option value="tous">Tous</option>
-          <option value="pas_appeles">Pas encore appelés</option>
-          <option value="appeles">Déjà appelés</option>
-          <option value="whatsapp">WhatsApp envoyé</option>
-          <option value="a_relancer">À relancer (en cours)</option>
-          <optgroup label="Statut">
-            <option value="Lien envoyé">Lien envoyé</option>
-            <option value="Relancé">Relancé</option>
-            <option value="Don effectué">Don effectué</option>
-            <option value="À rappeler">À rappeler</option>
-            <option value="À relancer">À relancer</option>
-            <option value="Ne répond pas">Ne répond pas</option>
-            <option value="Refusé">Refusé</option>
-          </optgroup>
-          <optgroup label="Données initiales (tableau)">
-            <option value="faux">Faux numéro (col F)</option>
-            <option value="d_x">Colonne D = X</option>
-            <option value="e_1">Colonne E = 1</option>
-            <option value="e_2">Colonne E = 2</option>
-            <option value="e_3">Colonne E = 3</option>
-            <option value="e_g">Colonne E = G</option>
-          </optgroup>
-        </select>
+          ⚙︎ Filtres{selected.size ? ` (${selected.size})` : ""}
+        </button>
+        {selected.size > 0 && (
+          <button className="filter-clear" onClick={() => setSelected(new Set())}>
+            Effacer
+          </button>
+        )}
       </div>
+
+      {panelOpen && (
+        <div className="filter-panel">
+          {grouped.map(([group, opts]) => (
+            <div className="fp-group" key={group}>
+              <div className="fp-title">{group}</div>
+              <div className="fp-opts">
+                {opts.map((o) => (
+                  <label
+                    key={o.id}
+                    className={`fp-opt ${selected.has(o.id) ? "on" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(o.id)}
+                      onChange={() => toggle(o.id)}
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {recallCount > 0 && (
         <div className="recall-banner">
