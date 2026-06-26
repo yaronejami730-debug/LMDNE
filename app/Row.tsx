@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { memo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Contact, Event } from "@/lib/db";
 import { buildMessage, toIntl, STATUSES } from "@/lib/messages";
@@ -37,7 +37,7 @@ const STATUS_CLASS: Record<string, string> = {
   Refusé: "st-gray",
 };
 
-export default function Row({
+function Row({
   contact,
   donationUrl,
   events,
@@ -238,3 +238,10 @@ export default function Row({
     </div>
   );
 }
+
+// Mémoïsation : la liste virtualisée recrée les éléments Row à chaque re-render
+// (frappe recherche, scroll, refresh). Sans memo, toutes les lignes visibles se
+// re-rendent (SVG + timeline = coûteux). Avec des props référentiellement stables
+// (contact, events via NO_EVENTS, donationUrl, waLastHour), le compare shallow
+// par défaut suffit : une ligne ne se re-rend que si SES données changent.
+export default memo(Row);

@@ -20,3 +20,6 @@ data.db-wal
 *.log
 .vercel
 .env*
+
+# build artifact
+tsconfig.tsbuildinfo

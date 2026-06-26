@@ -1,13 +1,14 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Contact, Event } from "@/lib/db";
 import Row from "./Row";
 import { parseSqlite } from "@/lib/time";
 
 const RECALL_MIN = 60; // minutes avant qu'un NRP remonte en tête
 const ROW_EST = 200; // hauteur estimée d'une ligne (px), ajustée par mesure réelle
+const NO_EVENTS: Event[] = []; // ref. stable -> ne casse pas la mémoïsation de Row
 
 const clean = (v: string | null) => (v ? v.replace(/\.0$/, "") : "");
 
@@ -127,29 +128,17 @@ export default function List({
 
   const recallCount = useMemo(() => contacts.filter(needsRecall).length, [contacts]);
 
-  // Virtualisation fenêtrée : seules les lignes proches du viewport sont rendues
-  // dans le DOM. Quand on scrolle (haut ou bas), les lignes qui sortent de l'écran
-  // sont retirées et celles qui entrent sont montées. Le DOM ne contient jamais
-  // les ~2700 lignes -> plus de crash, mémoire constante.
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const [listTop, setListTop] = useState(0);
+  // Virtualisation : seules les lignes proches du viewport sont montées dans le
+  // DOM. Au scroll, celles qui sortent (haut ou bas) sont démontées, celles qui
+  // entrent sont montées. Le DOM ne contient jamais les ~2700 lignes -> mémoire
+  // constante. Scroll interne au conteneur (fiable, pas de piège SSR).
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Décalage du conteneur depuis le haut du document (pour le scroll fenêtré)
-  useLayoutEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const measure = () =>
-      setListTop(el.getBoundingClientRect().top + window.scrollY);
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
-
-  const virtualizer = useWindowVirtualizer({
+  const virtualizer = useVirtualizer({
     count: filtered.length,
+    getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_EST,
     overscan: 6, // lignes rendues en plus de part et d'autre du viewport
-    scrollMargin: listTop,
     getItemKey: (i) => filtered[i].id,
   });
   const vItems = virtualizer.getVirtualItems();
@@ -223,34 +212,35 @@ export default function List({
         {filtered.length} contact{filtered.length > 1 ? "s" : ""}
       </p>
 
-      <div
-        ref={listRef}
-        style={{ position: "relative", height: virtualizer.getTotalSize() }}
-      >
-        {vItems.map((vi) => {
-          const c = filtered[vi.index];
-          return (
-            <div
-              key={vi.key}
-              data-index={vi.index}
-              ref={virtualizer.measureElement}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)`,
-              }}
-            >
-              <Row
-                contact={c}
-                donationUrl={donationUrl}
-                events={eventsByContact[c.id] || []}
-                waLastHour={waLastHour}
-              />
-            </div>
-          );
-        })}
+      <div ref={scrollRef} className="vlist">
+        <div
+          style={{ position: "relative", height: virtualizer.getTotalSize() }}
+        >
+          {vItems.map((vi) => {
+            const c = filtered[vi.index];
+            return (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${vi.start}px)`,
+                }}
+              >
+                <Row
+                  contact={c}
+                  donationUrl={donationUrl}
+                  events={eventsByContact[c.id] || NO_EVENTS}
+                  waLastHour={waLastHour}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </>
   );

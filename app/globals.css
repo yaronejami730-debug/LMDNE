@@ -898,3 +898,63 @@ button {
     margin-top: 8px;
   }
 }
+
+/* ---- Liste virtualisée (scroll interne) ---- */
+.vlist {
+  height: calc(100vh - 340px);
+  min-height: 320px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* scroll fluide iOS */
+  overscroll-behavior: contain;
+}
+
+/* ---- Skeleton (chargement) ---- */
+.skl-row {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.skl {
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    #eef1f6 25%,
+    #e0e5ee 37%,
+    #eef1f6 63%
+  );
+  background-size: 400% 100%;
+  animation: skl-shimmer 1.4s ease infinite;
+}
+.skl-who { flex: 1 1 60%; display: flex; flex-direction: column; gap: 8px; }
+.skl-line { height: 12px; }
+.skl-line.lg { height: 16px; width: 45%; }
+.skl-line.md { width: 30%; }
+.skl-line.sm { width: 22%; }
+.skl-actions { display: flex; gap: 8px; flex: 1 1 100%; margin-top: 4px; }
+.skl-btn { height: 34px; width: 92px; border-radius: 9px; }
+
+@keyframes skl-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skl { animation: none; }
+}
+
+/* ---- Indicateur de chargement progressif ---- */
+.loading-more {
+  background: #eff4ff;
+  border: 1px solid #cdddff;
+  color: #1e3a8a;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  text-align: center;
+}
